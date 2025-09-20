@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "EVE Online wormhole rolling planner with mass calculations",
   "main": "src/app.js",
+  "license": "MIT",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch"
