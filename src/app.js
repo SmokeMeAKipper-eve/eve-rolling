@@ -164,19 +164,31 @@ class GameMode extends GameModeBase {
     }
     
     console.log(`🎮 Game Action: ${ship.getDisplayName()} ${direction === 'A' ? 'incoming' : 'outgoing'}`);
-    console.log(`  Actual mass used: ${actualMassUsed} Gg (hidden)`);
-    console.log(`  Hidden remaining mass: ${this.remainingMass} Gg`);
+    console.log(`  Actual mass used: ${actualMassUsed} Gg (for tracking, exact value known)`);
+    console.log(`  Actual remaining mass: ${this.remainingMass} Gg`);
     console.log(`  State Boundaries 100/50/10% = ${this.initialActualMass}Gg / ${Math.floor(this.initialActualMass * 0.5)}Gg / ${Math.floor(this.initialActualMass * 0.1)}Gg`);
     console.log(`  Player sees range: ${Math.round(displayedResultMass.min)} - ${Math.round(displayedResultMass.max)} Gg`);
     console.log(`  Outcome: ${outcome.message}`);
     
-    // ERROR CHECK: Hidden mass should always be within displayed range (unless collapsed)
+    // Log ships on far side after action
+    if (this.ui && this.ui.getShipsOnFarSideDescription) {
+      const farSideDescription = this.ui.getShipsOnFarSideDescription(this.ui.shipsOnFarSide);
+      console.log(`  Ships on Far Side: ${farSideDescription || 'None'}`);
+    } else {
+      console.log(`  Ships on Far Side: Unable to determine (ui reference issue)`);
+    }
+    
+    // ERROR CHECK: Actual mass should always be within displayed range (unless collapsed)
+    // This check happens BEFORE random events to validate player action consistency
     if (outcome.newState !== 'gone' && this.remainingMass > 0 && (this.remainingMass < displayedResultMass.min || this.remainingMass > displayedResultMass.max)) {
-      console.error(`🚨 CONSISTENCY ERROR: Hidden mass ${this.remainingMass} Gg is outside displayed range ${Math.round(displayedResultMass.min)} - ${Math.round(displayedResultMass.max)} Gg`);
+      console.error(`🚨 CONSISTENCY ERROR: Actual mass ${this.remainingMass} Gg is outside displayed range ${Math.round(displayedResultMass.min)} - ${Math.round(displayedResultMass.max)} Gg`);
       console.error(`  This indicates a bug in our calculation logic!`);
     } else if (outcome.newState === 'gone' && this.remainingMass > 0) {
-      console.error(`🚨 CONSISTENCY ERROR: Wormhole showing as collapsed but hidden mass is positive: ${this.remainingMass} Gg`);
+      console.error(`🚨 CONSISTENCY ERROR: Wormhole showing as collapsed but actual mass is positive: ${this.remainingMass} Gg`);
     }
+    
+    // Process random events after the main action is complete and validated
+    this.ui.processRandomEventsAfterAction();
   }
   
   determineOutcome() {
@@ -187,7 +199,7 @@ class GameMode extends GameModeBase {
     const percentRemaining = (this.remainingMass / this.initialActualMass) * 100;
     const currentState = this.ui.currentWhState;
     
-    // Determine what state the wormhole should be in based on mass
+    // Determine what state the wormhole should be in based on mass remaining
     let targetState;
     if (this.remainingMass <= 0) {
       targetState = 'gone';
@@ -195,10 +207,9 @@ class GameMode extends GameModeBase {
       targetState = 'critical';
     } else if (percentRemaining <= 50) {
       targetState = 'destab';
-    } else if (currentState === 'fresh' && percentRemaining <= 100) {
-      targetState = 'stable';
     } else {
-      targetState = currentState; // No state change
+      // Above 50% mass remaining - wormhole should be stable
+      targetState = 'stable';
     }
     
     // Handle collapsed wormhole (always shows message)
@@ -393,6 +404,12 @@ class WormholeRollingUI {
     if (randomButtonContainer) {
       randomButtonContainer.style.display = 'none'; // Hidden by default (tracker mode)
     }
+    
+    // Set initial button text for tracker mode (default)
+    const startButton = document.getElementById('start-tracking');
+    const resetButton = document.getElementById('reset-all');
+    startButton.textContent = 'Start Tracking';
+    resetButton.textContent = 'Reset Tracking';
   }
   
   setupFarSideFleet() {
@@ -481,6 +498,18 @@ class WormholeRollingUI {
     const randomButtonContainer = document.querySelector('.random-button-container');
     if (randomButtonContainer) {
       randomButtonContainer.style.display = newMode === this.gameMode ? 'flex' : 'none';
+    }
+    
+    // Update button text based on mode
+    const startButton = document.getElementById('start-tracking');
+    const resetButton = document.getElementById('reset-all');
+    
+    if (newMode === this.gameMode) {
+      startButton.textContent = 'Start Game';
+      resetButton.textContent = 'Reset Game';
+    } else {
+      startButton.textContent = 'Start Tracking';
+      resetButton.textContent = 'Reset Tracking';
     }
     
     // Update title if needed
@@ -580,6 +609,217 @@ class WormholeRollingUI {
     }
   }
   
+  // Random Events System for Game Mode
+  checkForRandomEvents() {
+    if (!RANDOM_EVENTS || this.currentMode !== this.gameMode) {
+      return [];
+    }
+    
+    const triggeredEvents = [];
+    RANDOM_EVENTS.forEach(event => {
+      if (Math.random() < event.probability) {
+        triggeredEvents.push(event);
+      }
+    });
+    
+    return triggeredEvents;
+  }
+  
+  processRandomEventsAfterAction() {
+    // Only process events in game mode and if wormhole isn't collapsed
+    if (this.currentMode !== this.gameMode || this.gameMode.remainingMass <= 0) {
+      return;
+    }
+
+    const randomEvents = this.checkForRandomEvents();
+    
+    if (randomEvents.length > 0) {
+      // Filter out events that have ships exceeding wormhole restrictions
+      const currentRestriction = this.initialWhRestriction;
+      const validEvents = randomEvents.filter(event => {
+        // Check if all actions in the event have ships that fit through the wormhole
+        return event.actions.every(action => {
+          const shipData = SHIP_TYPES[action.shipType];
+          return shipData && shipData.size <= currentRestriction;
+        });
+      });
+      
+      if (validEvents.length > 0) {
+        // Randomly select one of the valid events (instead of taking the first)
+        const randomIndex = Math.floor(Math.random() * validEvents.length);
+        this.processRandomEventAsAction(validEvents[randomIndex]);
+      } else {
+        console.log('🎲 Random events triggered but all ships too large for wormhole restrictions');
+      }
+    }
+  }  processRandomEventAsAction(event) {
+    console.log(`\n🎲 Random Event Triggered: ${event.displayName}`);
+    
+    const processedActions = [];
+    let totalMassImpact = 0;
+    let currentDisplayedMass = this.calculateCurrentMass(); // Start with current player view
+    let eventCompleted = false;
+    let eventStateChange = 'no-change'; // Track the overall state change for the event
+    let eventStateChangeMessage = '';
+    const initialState = this.currentWhState; // Remember initial state
+    
+    // Process each action in the event sequentially
+    for (let i = 0; i < event.actions.length; i++) {
+      const eventAction = event.actions[i];
+      
+      // Check if wormhole is still open before processing this action
+      if (this.currentWhState === 'gone') {
+        console.log(`  Action ${i + 1} skipped: Wormhole already collapsed`);
+        break;
+      }
+      
+      console.log(`  Processing action ${i + 1}/${event.actions.length}: ${SHIP_TYPES[eventAction.shipType]?.name || eventAction.shipType} ${eventAction.direction}`);
+      
+      // Create ship for this specific action
+      const eventShip = this.createEventShip(eventAction);
+      const direction = eventAction.direction === 'outgoing' ? 'B' : 'A'; // B = outgoing, A = incoming
+      
+      // Create action and get mass impact
+      const action = new Action(eventShip, direction);
+      const massImpact = eventAction.getMassImpact();
+      totalMassImpact += massImpact;
+      
+      // Apply mass reduction to hidden mass
+      this.gameMode.remainingMass -= massImpact;
+      
+      // Apply this action to the current displayed mass (progressive calculation)
+      const displayedResultMass = action.applyToMass(currentDisplayedMass);
+      
+      // Apply state boundaries to displayed mass (same as normal actions)
+      const currentWormhole = this.getCurrentWormhole();
+      const stateBoundaries = currentWormhole.getStateBoundaries();
+      displayedResultMass.min = Math.max(displayedResultMass.min, stateBoundaries.min);
+      displayedResultMass.max = Math.min(displayedResultMass.max, stateBoundaries.max);
+      displayedResultMass.min = Math.min(displayedResultMass.min, displayedResultMass.max);
+      
+      // Update the running displayed mass for the next action
+      currentDisplayedMass = displayedResultMass;
+      
+      // Determine outcome using same logic as normal actions (after each action)
+      const outcome = this.gameMode.determineOutcome();
+      
+      // Update current state if it changed
+      if (outcome.newState !== 'no-change') {
+        this.currentWhState = outcome.newState;
+        console.log(`    Action ${i + 1} outcome: ${outcome.message}`);
+        
+        // Track the most significant state change for the overall event
+        if (eventStateChange === 'no-change') {
+          eventStateChange = outcome.newState;
+          eventStateChangeMessage = outcome.message;
+        }
+      }
+      
+      // Store this action
+      processedActions.push({
+        action: action,
+        massImpact: massImpact,
+        outcome: outcome,
+        displayedMass: displayedResultMass
+      });
+      
+      console.log(`    Action ${i + 1} mass impact: ${massImpact} Gg`);
+      console.log(`    Remaining after action ${i + 1}: ${this.gameMode.remainingMass} Gg`);
+      
+      // Check if wormhole collapsed from this action
+      if (outcome.newState === 'gone') {
+        console.log(`    🚨 Action ${i + 1} caused wormhole collapse!`);
+        eventCompleted = true;
+        break;
+      }
+    }
+    
+    // Add to committed actions (visible to player like normal action)
+    const farSideSnapshot = { ...this.shipsOnFarSide };
+    const finalOutcome = processedActions.length > 0 ? processedActions[processedActions.length - 1].outcome : { newState: 'no-change', message: 'No change' };
+    
+    this.committedActions.push({
+      type: 'event',
+      actions: processedActions.map(pa => pa.action),
+      eventData: event,
+      actualMassUsed: totalMassImpact,
+      remainingMass: this.gameMode.remainingMass,
+      outcome: finalOutcome,
+      stateChange: eventStateChange, // Use the tracked overall state change
+      currentState: this.currentWhState,
+      finalMass: currentDisplayedMass, // Player sees this final progressive mass
+      shipsOnFarSide: farSideSnapshot,
+      timestamp: Date.now(),
+      actionsProcessed: processedActions.length,
+      totalActions: event.actions.length
+    });
+    
+    // Show final result to player
+    console.log(`  Total event mass impact: ${totalMassImpact} Gg`);
+    console.log(`  Player sees final range: ${Math.round(currentDisplayedMass.min)} - ${Math.round(currentDisplayedMass.max)} Gg`);
+    console.log(`  Actual remaining after event: ${this.gameMode.remainingMass} Gg`);
+    console.log(`  Actions completed: ${processedActions.length}/${event.actions.length}`);
+    
+    // Log ships on far side after event
+    if (this.getShipsOnFarSideDescription) {
+      const eventFarSideDescription = this.getShipsOnFarSideDescription(this.shipsOnFarSide);
+      console.log(`  Ships on Far Side: ${eventFarSideDescription || 'None'}`);
+    } else {
+      console.log(`  Ships on Far Side: Unable to determine (method missing)`);
+    }
+    
+    // Handle wormhole collapse from event
+    if (this.currentWhState === 'gone') {
+      console.log(`  🚨 Random event caused wormhole collapse - triggering completion`);
+      this.handleWormholeCompletion();
+      return; // Don't update UI after completion
+    }
+    
+    // Update the UI to show the new mass ranges
+    this.displayStatus();
+    this.renderActionsList();
+  }
+  
+  createEventShip(eventAction) {
+    // Extract ship type from individual action
+    const shipType = eventAction.shipType;
+    const shipData = SHIP_TYPES[shipType];
+    
+    if (!shipData) {
+      // Fallback for unknown ship types
+      return {
+        type: 'cruiser',
+        mode: 'unknown',
+        getMass: () => ({
+          min: SHIP_TYPES.cruiser.cold,
+          max: SHIP_TYPES.cruiser.hot
+        }),
+        getDisplayName: () => 'Event Ship (Hidden)'
+      };
+    }
+    
+    return {
+      type: shipType,
+      mode: 'unknown', // Unknown mass like player actions
+      getMass: () => ({
+        min: shipData.cold,
+        max: shipData.hot
+      }),
+      getDisplayName: () => `Event ${shipData.name} (Hidden)`
+    };
+  }  logAction(actionData) {
+    // For events, add directly to committed actions as separate entries
+    if (actionData.type === 'event') {
+      this.committedActions.push({
+        type: 'event',
+        eventData: actionData,
+        timestamp: Date.now()
+      });
+      
+      this.renderActionsList();
+    }
+  }
+  
   setupEventListeners() {
     // Start tracking button
     document.getElementById('start-tracking').addEventListener('click', () => {
@@ -593,7 +833,7 @@ class WormholeRollingUI {
     
     // Reset button
     document.getElementById('reset-all').addEventListener('click', () => {
-      this.resetAll();
+      this.resetCurrentMode();
     });
     
     // Action buttons - behavior depends on current mode
@@ -814,6 +1054,24 @@ class WormholeRollingUI {
       shipsOnFarSide: farSideSnapshot,
       timestamp: Date.now()
     };
+    
+    // Console logging for tracker mode
+    const actionDescriptions = actions.map(action => 
+      `${action.ship.getDisplayName()} ${action.direction === 'A' ? 'incoming' : 'outgoing'}`
+    ).join(', ');
+    const stateText = stateChange === 'no-change' ? 'no state change' : 
+                     stateChange === 'destab' ? 'destabilized' : 
+                     stateChange === 'critical' ? 'critical' : 
+                     stateChange === 'gone' ? 'wormhole gone' : stateChange;
+    console.log(`📊 Tracker Actions Applied: ${actionDescriptions}`);
+    console.log(`  Result: ${Math.round(finalMass.min)} - ${Math.round(finalMass.max)} Gg, ${stateText}`);
+    console.log(`  Passed mass this batch: ${Math.round(entryPassedMass)} Gg`);
+    console.log(`  Total passed mass: ${Math.round(totalPassedMass)} Gg`);
+    
+    // Log ships on far side after tracker batch
+    const trackerFarSideDescription = this.getShipsOnFarSideDescription(farSideSnapshot);
+    console.log(`  Ships on Far Side: ${trackerFarSideDescription || 'None'}`);
+    
     this.committedActions.push(entry);
   }
   
@@ -873,7 +1131,7 @@ class WormholeRollingUI {
     const stateText = WORMHOLE_STATES[this.initialWhState];
     const restrictionText = WORMHOLE_RESTRICTIONS[this.initialWhRestriction];
     html += `<div class="log-header">`;
-    html += `<div><strong>Initial Setup:</strong> ${this.initialWhSize} Gg wormhole in ${stateText} state, up to ${restrictionText}</div>`;
+    html += `<div><strong>Initial Setup:</strong> ${this.initialWhSize} Gg wormhole in ${stateText} state, ${restrictionText}</div>`;
     
     // Show the initial starting mass range (never changes)
     const initialWormhole = new Wormhole(this.initialWhSize, this.initialWhState);
@@ -889,6 +1147,81 @@ class WormholeRollingUI {
     html += `</div>`;
     
     this.committedActions.forEach((entry, entryIndex) => {
+      // Handle different entry types
+      if (entry.type === 'event') {
+        // Event entry - display like normal action but with event styling
+        html += `<div class="log-entry log-event">`;
+        
+        // Top section - event message and state changes
+        html += `<div class="log-entry-top">`;
+        html += `<div class="log-entry-left">`;
+        html += `<div class="log-entry-header" style="color: #FFA500;"><strong>Random Event:</strong></div>`;
+        html += `<div class="log-action" style="color: #FFA500;">${entry.eventData.displayName}</div>`;
+        
+        // Show state change if any
+        if (entry.stateChange && entry.stateChange !== 'no-change') {
+          const stateChangeText = entry.stateChange === 'fresh' ? 'Fresh' :
+                                 entry.stateChange === 'stable' ? 'Stable' :
+                                 entry.stateChange === 'destab' ? 'Destab' :
+                                 entry.stateChange === 'critical' ? 'Critical' :
+                                 entry.stateChange === 'gone' ? 'Gone' : entry.stateChange;
+          html += `<div class="log-state-change">• *** STATE CHANGE: Wormhole is now ${stateChangeText} ***</div>`;
+        }
+        html += `</div>`; // Close log-entry-left
+        
+        // Right side - current state
+        if (entry.currentState) {
+          const currentStateText = WORMHOLE_STATES[entry.currentState] || entry.currentState;
+          html += `<div class="log-entry-current-state">Current: ${currentStateText}</div>`;
+        }
+        html += `</div>`; // Close log-entry-top
+        
+        // Show actions processed in this event
+        if (entry.eventData && entry.eventData.actions) {
+          html += `<div class="log-event-actions">`;
+          html += `<div class="log-event-actions-header"><strong>Actions:</strong></div>`;
+          
+          for (let i = 0; i < entry.actionsProcessed; i++) {
+            const action = entry.eventData.actions[i];
+            const actionNum = i + 1;
+            const directionText = action.direction === 'outgoing' ? 'jumps out' : 'jumps back';
+            const shipName = SHIP_TYPES[action.shipType]?.name || action.shipType;
+            html += `<div class="log-event-action">• ${shipName} ${directionText}</div>`;
+          }
+          
+          if (entry.actionsProcessed < entry.totalActions) {
+            const skipped = entry.totalActions - entry.actionsProcessed;
+            html += `<div class="log-event-action-skipped">• ${skipped} action(s) skipped (wormhole collapsed)</div>`;
+          }
+          
+          html += `</div>`; // Close log-event-actions
+        }
+        
+        // Bottom section - mass calculations (like normal actions)
+        html += `<div class="log-entry-bottom">`;
+        const minMassText = Math.round(entry.finalMass.min);
+        const maxMassText = Math.round(entry.finalMass.max);
+        html += `<div class="log-result"><strong>Remaining After Event:</strong><br>${minMassText} - ${maxMassText} Gg</div>`;
+        
+        // Show total mass range for the event (sum of all possible action masses)
+        if (entry.eventData && entry.eventData.name === 'neutral_cruiser_jump') {
+          const singleMin = 13, singleMax = 63;
+          const totalMin = singleMin * 2; // Two cruiser jumps minimum
+          const totalMax = singleMax * 2; // Two cruiser jumps maximum
+          html += `<div class="log-passed-mass"><strong>Event Mass:</strong><br>${totalMin}-${totalMax} Gg (Unknown)</div>`;
+        } else if (entry.eventData && entry.eventData.name === 'neutral_carrier_jump') {
+          const singleMin = 1250, singleMax = 1750;
+          const totalMin = singleMin * 2; // Two carrier jumps minimum
+          const totalMax = singleMax * 2; // Two carrier jumps maximum
+          html += `<div class="log-passed-mass"><strong>Event Mass:</strong><br>${totalMin}-${totalMax} Gg (Unknown)</div>`;
+        }
+        
+        html += `</div>`; // Close log-entry-bottom
+        html += `</div>`; // Close log-entry
+        return; // Skip normal action processing
+      }
+      
+      // Normal action entry
       html += `<div class="log-entry">`;
       
       // Top section - actions and state changes
@@ -1031,7 +1364,9 @@ class WormholeRollingUI {
     this.initialWhSize = parseInt(this.getWhSize());
     this.initialWhState = this.getWhState();
     this.initialWhRestriction = parseInt(this.getWhRestriction());
-    this.currentWhState = this.initialWhState;
+    
+    // Convert "fresh" to "stable" - fresh is just a UI concept for stable with no known transits
+    this.currentWhState = this.initialWhState === 'fresh' ? 'stable' : this.initialWhState;
     this.isTracking = true;
     
     // Initialize far side fleet from initial setup
@@ -1072,10 +1407,10 @@ class WormholeRollingUI {
     if (addActionRow) addActionRow.style.display = 'none';
     if (applySection) applySection.style.display = 'none';
     
-    // Show completion message - check if we have MORE ships on far side than initially
+    // Show completion message - check if we have ANY ships left on far side
     const currentFarSideCount = Object.values(this.shipsOnFarSide).reduce((sum, count) => sum + count, 0);
     const initialFarSideCount = Object.values(this.initialFarSideFleet).reduce((sum, count) => sum + count, 0);
-    const hasStrandedShips = currentFarSideCount > initialFarSideCount;
+    const hasStrandedShips = currentFarSideCount > 0;
     
     const successMessages = [
       "🎉 Rolling Complete - you successfully rolled the shit out of that wormhole",
@@ -1129,9 +1464,8 @@ class WormholeRollingUI {
     // Create clear summary text
     let summaryText = '';
     if (hasStrandedShips) {
-      // Count newly stranded ships (difference between current and initial)
-      const newlyStranded = currentFarSideCount - initialFarSideCount;
-      summaryText = `Failure - wormhole rolled, but you stranded ${newlyStranded} ship${newlyStranded !== 1 ? 's' : ''}`;
+      // Show total stranded ships
+      summaryText = `Failure - wormhole rolled, but ${currentFarSideCount} ship${currentFarSideCount !== 1 ? 's' : ''} left on far side`;
     } else {
       summaryText = 'Success - wormhole rolled, and all ships ended up on the correct side';
     }
@@ -1182,6 +1516,13 @@ class WormholeRollingUI {
         }
       });
     }
+  }
+  
+  resetCurrentMode() {
+    // Reset to initial setup but stay in current mode
+    this.resetAll();
+    // Note: resetAll() already handles everything, we just renamed the public method
+    // This keeps the current mode intact since switchToMode() is not called
   }
   
   resetAll() {

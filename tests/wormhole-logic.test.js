@@ -347,7 +347,13 @@ describe('Wormhole Logic', () => {
       const cruiser = new Ship('cruiser', 'unknown');
       const cruiserMass = cruiser.getMass();
       expect(cruiserMass.min).toBe(13); // Cold
-      expect(cruiserMass.max).toBe(63); // Hot
+      expect(cruiserMass.max).toBe(18); // Hot
+      
+      // Test Over-Prop Cruiser
+      const opcruiser = new Ship('opcruiser', 'unknown');
+      const opcruiserMass = opcruiser.getMass();
+      expect(opcruiserMass.min).toBe(13); // Cold
+      expect(opcruiserMass.max).toBe(65); // Hot
     });
   });
 
@@ -357,8 +363,8 @@ describe('Wormhole Logic', () => {
       const incomingAction = new Action(ship, 'A');
       const outgoingAction = new Action(ship, 'B');
       
-      expect(incomingAction.getDirectionText()).toBe('<< Incoming');
-      expect(outgoingAction.getDirectionText()).toBe('Outgoing >>');
+      expect(incomingAction.getDirectionText()).toBe('Jump back');
+      expect(outgoingAction.getDirectionText()).toBe('Jump out');
     });
   });
 

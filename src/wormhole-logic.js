@@ -7,7 +7,8 @@ const SHIP_TYPES = {
   'carrier': { name: 'Carrier', cold: 1250, hot: 1750, size: 5 },
   'bs': { name: 'Battleship', cold: 100, hot: 150, size: 3 },
   'marauder': { name: 'Marauder', cold: 160, hot: 210, size: 3 },
-  'cruiser': { name: 'Cruiser', cold: 13, hot: 63, size: 2 },
+  'opcruiser': { name: 'Over-Prop Cruiser', cold: 13, hot: 65, size: 2 },
+  'cruiser': { name: 'Cruiser', cold: 13, hot: 18, size: 2 },
   'dictor': { name: 'Dictor', cold: 1, hot: 2, size: 1 },
   'covops': { name: 'CovOps', cold: 1, hot: 2, size: 1 },
 };
@@ -159,7 +160,7 @@ class Action {
   }
   
   getDirectionText() {
-    return this.direction === 'A' ? '<< Incoming' : 'Outgoing >>';
+    return this.direction === 'A' ? 'Jump back' : 'Jump out';
   }
   
   applyToMass(currentMass, wormholeState = null) {
@@ -197,13 +198,52 @@ class Action {
 }
 
 // Export for Node.js testing
-if (typeof module !== 'undefined' && module.exports) {
+// Random Events for Game Mode
+const RANDOM_EVENTS = [
+    {
+        name: 'good_get',
+        displayName: '⚡ Its "Good Get"!! Famous elite level griefer!!',
+        probability: 0.505, // 0.5% chance
+        visible: true, // Player sees the ship go through
+        actions: [
+            {
+                shipType: 'opcruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'incoming',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            }
+        ]
+    },
+    {
+        name: 'random_cruisers_jump',
+        displayName: '⚡ two random stratios jump through the wormhole and flee',
+        probability: 0.005, // 0.5% chance
+        visible: true, // Player sees the ship go through
+        actions: [
+            {
+                shipType: 'cruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.cruiser.cold; },
+            },
+            {
+                shipType: 'cruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.cruiser.cold; },
+            }
+        ]
+    }
+];if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SHIP_TYPES,
     WORMHOLE_MASS_TYPES,
     SHIP_MODES,
     WORMHOLE_STATES,
     WORMHOLE_RESTRICTIONS,
+    RANDOM_EVENTS,
     Wormhole,
     Ship,
     CustomMass,
@@ -218,6 +258,7 @@ if (typeof window !== 'undefined') {
   window.SHIP_MODES = SHIP_MODES;
   window.WORMHOLE_STATES = WORMHOLE_STATES;
   window.WORMHOLE_RESTRICTIONS = WORMHOLE_RESTRICTIONS;
+  window.RANDOM_EVENTS = RANDOM_EVENTS;
   window.Wormhole = Wormhole;
   window.Ship = Ship;
   window.CustomMass = CustomMass;
