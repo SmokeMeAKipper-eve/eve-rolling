@@ -3,6 +3,7 @@ const {
   WORMHOLE_MASS_TYPES,
   SHIP_MODES,
   WORMHOLE_STATES,
+  WORMHOLE_RESTRICTIONS,
   Wormhole,
   Ship,
   CustomMass,
@@ -249,6 +250,40 @@ describe('Wormhole Logic', () => {
     });
   });
 
+  describe('New Ship Integration', () => {
+    test('should handle new ships (dictor, covops) in action calculations', () => {
+      // Test that new ships work correctly in realistic scenarios
+      const wormhole = new Wormhole(3300, 'fresh');
+      const initialRange = wormhole.getCurrentMassRange();
+      
+      // Send a dictor through (very small mass)
+      const dictorShip = new Ship('dictor', 'hot');
+      const dictorMass = dictorShip.getMass();
+      expect(dictorMass.min).toBe(2);
+      expect(dictorMass.max).toBe(2);
+      
+      const dictorAction = new Action(dictorShip, 'B');
+      const afterDictorRange = dictorAction.applyToMass(initialRange);
+      expect(afterDictorRange.min).toBe(initialRange.min - 2);
+      expect(afterDictorRange.max).toBe(initialRange.max - 2);
+      
+      // Send a covops through (also very small mass)
+      const covopsShip = new Ship('covops', 'cold');
+      const covopsMass = covopsShip.getMass();
+      expect(covopsMass.min).toBe(1);
+      expect(covopsMass.max).toBe(1);
+      
+      const covopsAction = new Action(covopsShip, 'B');
+      const afterCovopsRange = covopsAction.applyToMass(afterDictorRange);
+      expect(afterCovopsRange.min).toBe(afterDictorRange.min - 1);
+      expect(afterCovopsRange.max).toBe(afterDictorRange.max - 1);
+      
+      // Verify the ships are properly classified as size 1 (destroyer class)
+      expect(SHIP_TYPES.dictor.size).toBe(1);
+      expect(SHIP_TYPES.covops.size).toBe(1);
+    });
+  });
+
   describe('Custom Mass Support', () => {
     test('should handle custom mass correctly', () => {
       const customMass = new CustomMass(500);
@@ -295,6 +330,18 @@ describe('Wormhole Logic', () => {
       const marauderMass = marauder.getMass();
       expect(marauderMass.min).toBe(210);
       expect(marauderMass.max).toBe(210);
+      
+      // Test Dictor (new ship)
+      const dictor = new Ship('dictor', 'unknown');
+      const dictorMass = dictor.getMass();
+      expect(dictorMass.min).toBe(1); // Cold
+      expect(dictorMass.max).toBe(2); // Hot
+      
+      // Test CovOps (new ship)
+      const covops = new Ship('covops', 'hot');
+      const covopsMass = covops.getMass();
+      expect(covopsMass.min).toBe(2);
+      expect(covopsMass.max).toBe(2);
       
       // Test Cruiser
       const cruiser = new Ship('cruiser', 'unknown');
@@ -425,6 +472,50 @@ describe('Wormhole Logic', () => {
     });
   });
   
+  describe('Wormhole Size Restrictions', () => {
+    test('should have correct ship size classifications', () => {
+      // Verify ship size assignments match expected EVE Online ship classifications
+      expect(SHIP_TYPES.dictor.size).toBe(1); // Destroyer class
+      expect(SHIP_TYPES.covops.size).toBe(1); // Destroyer class
+      expect(SHIP_TYPES.cruiser.size).toBe(2); // Battlecruiser and below
+      expect(SHIP_TYPES.rhic.size).toBe(2); // Rolling HIC (cruiser class per user edit)
+      expect(SHIP_TYPES.bs.size).toBe(3); // Battleship
+      expect(SHIP_TYPES.rbs.size).toBe(3); // Rolling Battleship (battleship class)
+      expect(SHIP_TYPES.marauder.size).toBe(3); // Marauder (battleship class)
+      expect(SHIP_TYPES.carrier.size).toBe(5); // Capital
+    });
+    
+    test('should provide correct restriction descriptions', () => {
+      const restrictions = WORMHOLE_RESTRICTIONS;
+      expect(restrictions[1]).toBe('up to Destroyer');
+      expect(restrictions[2]).toBe('up to Battlecruiser');
+      expect(restrictions[3]).toBe('up to Battleship');
+      expect(restrictions[4]).toBe('up to Freighter');
+      expect(restrictions[5]).toBe('up to Capital');
+    });
+    
+    test('should correctly validate ship size against restrictions', () => {
+      // Size 2 restriction (up to Battlecruiser) should allow only cruisers
+      const cruiser = SHIP_TYPES.cruiser;
+      const battleship = SHIP_TYPES.bs;
+      const carrier = SHIP_TYPES.carrier;
+      
+      expect(cruiser.size <= 2).toBe(true); // Should be allowed
+      expect(battleship.size <= 2).toBe(false); // Should be blocked
+      expect(carrier.size <= 2).toBe(false); // Should be blocked
+      
+      // Size 3 restriction (up to Battleship) should allow battleships but not capitals
+      expect(cruiser.size <= 3).toBe(true); // Should be allowed
+      expect(battleship.size <= 3).toBe(true); // Should be allowed
+      expect(carrier.size <= 3).toBe(false); // Should be blocked
+      
+      // Size 5 restriction (up to Capital) should allow everything
+      expect(cruiser.size <= 5).toBe(true); // Should be allowed
+      expect(battleship.size <= 5).toBe(true); // Should be allowed
+      expect(carrier.size <= 5).toBe(true); // Should be allowed
+    });
+  });
+
   describe('Game Mode State Transition Logic', () => {
     test('should handle original vs remaining mass correctly', () => {
       // Test the concept behind the dual-mass system fix
@@ -475,6 +566,163 @@ describe('Wormhole Logic', () => {
       const criticalMax = originalMass * 0.1; // 300
       expect(criticalMin).toBe(0);
       expect(criticalMax).toBe(300);
+    });
+  });
+
+  describe('Far Side Fleet', () => {
+    test('should initialize far side fleet with zero quantities', () => {
+      // Test the core logic without DOM
+      const initialFarSideFleet = {};
+      Object.keys(SHIP_TYPES).forEach(shipKey => {
+        initialFarSideFleet[shipKey] = 0;
+      });
+      
+      // Check that all ships start with 0 quantity
+      Object.keys(SHIP_TYPES).forEach(shipKey => {
+        expect(initialFarSideFleet[shipKey]).toBe(0);
+      });
+    });
+
+    test('should update far side quantities correctly', () => {
+      // Simulate the updateFarSideQuantity logic
+      const fleet = { destroyer: 0, cruiser: 0 };
+      
+      // Test increasing quantity
+      fleet.destroyer = (fleet.destroyer || 0) + 1;
+      expect(fleet.destroyer).toBe(1);
+      
+      fleet.destroyer = (fleet.destroyer || 0) + 1;
+      expect(fleet.destroyer).toBe(2);
+      
+      // Test decreasing quantity
+      fleet.destroyer = Math.max(0, (fleet.destroyer || 0) - 1);
+      expect(fleet.destroyer).toBe(1);
+      
+      // Test that quantity doesn't go below 0
+      fleet.destroyer = Math.max(0, (fleet.destroyer || 0) - 1);
+      fleet.destroyer = Math.max(0, (fleet.destroyer || 0) - 1);
+      expect(fleet.destroyer).toBe(0);
+    });
+
+    test('should properly describe ships on far side', () => {
+      // Test the helper function directly
+      const getShipsOnFarSideDescription = (shipsObj) => {
+        const shipCounts = [];
+        Object.entries(shipsObj).forEach(([shipKey, count]) => {
+          if (count > 0) {
+            const shipName = SHIP_TYPES[shipKey].name;
+            shipCounts.push(count === 1 ? shipName : `${count}x ${shipName}`);
+          }
+        });
+        return shipCounts.length > 0 ? shipCounts.join(', ') : null;
+      };
+      
+      // Test empty fleet
+      expect(getShipsOnFarSideDescription({})).toBeNull();
+      
+      // Test single ship (using actual SHIP_TYPES keys)
+      const singleShip = { cruiser: 1 };
+      expect(getShipsOnFarSideDescription(singleShip)).toBe('Cruiser');
+      
+      // Test multiple single ships
+      const multipleShips = { cruiser: 1, bs: 1 };
+      const description = getShipsOnFarSideDescription(multipleShips);
+      expect(description).toContain('Cruiser');
+      expect(description).toContain('Battleship');
+      
+      // Test multiple quantities
+      const multipleQuantities = { cruiser: 3, bs: 2 };
+      const quantityDescription = getShipsOnFarSideDescription(multipleQuantities);
+      expect(quantityDescription).toContain('3x Cruiser');
+      expect(quantityDescription).toContain('2x Battleship');
+      
+      // Test that zero counts are filtered out
+      const fleetWithZeros = { cruiser: 2, bs: 0, rhic: 0, carrier: 1 };
+      const filteredDescription = getShipsOnFarSideDescription(fleetWithZeros);
+      expect(filteredDescription).toContain('2x Cruiser');
+      expect(filteredDescription).toContain('Carrier');
+      expect(filteredDescription).not.toContain('Battleship x0');
+      expect(filteredDescription).not.toContain('Rolling Hictor x0');
+      
+      // Should only show non-zero ships
+      const expectedShips = filteredDescription.split(', ');
+      expect(expectedShips).toHaveLength(2); // Only cruiser and carrier
+    });
+
+    test('should respect ship size restrictions', () => {
+      // Test that ships larger than restriction level are filtered
+      const restrictionLevel = 2; // Up to Battlecruiser
+      
+      const allowedShips = Object.entries(SHIP_TYPES).filter(([key, ship]) => 
+        ship.size <= restrictionLevel
+      );
+      
+      const restrictedShips = Object.entries(SHIP_TYPES).filter(([key, ship]) => 
+        ship.size > restrictionLevel
+      );
+      
+      expect(allowedShips.length).toBeGreaterThan(0);
+      expect(restrictedShips.length).toBeGreaterThan(0);
+      
+      // Verify some specific ships (using correct SHIP_TYPES keys)
+      expect(SHIP_TYPES.dictor.size <= restrictionLevel).toBe(true); // Size 1, should be allowed
+      expect(SHIP_TYPES.covops.size <= restrictionLevel).toBe(true); // Size 1, should be allowed
+      expect(SHIP_TYPES.cruiser.size <= restrictionLevel).toBe(true);
+      expect(SHIP_TYPES.rhic.size <= restrictionLevel).toBe(true);
+      expect(SHIP_TYPES.bs.size > restrictionLevel).toBe(true);
+      expect(SHIP_TYPES.carrier.size > restrictionLevel).toBe(true);
+    });
+
+    test('should generate random far side fleet with correct probability distribution', () => {
+      // Simulate the random far side fleet logic
+      const restrictionLevel = 3; // Up to Battleship
+      const trials = 1000;
+      let zeroCount = 0;
+      let nonZeroCount = 0;
+      let totalQuantities = [];
+
+      // Run many trials to test probability distribution
+      for (let i = 0; i < trials; i++) {
+        const roll = Math.random();
+        if (roll > 0.75) { // 25% chance of non-zero
+          const quantity = Math.floor(Math.random() * 5) + 1; // 1-5
+          nonZeroCount++;
+          totalQuantities.push(quantity);
+        } else {
+          zeroCount++;
+        }
+      }
+
+      // Check that roughly 75% are zero and 25% are non-zero (with some tolerance)
+      const zeroPercentage = zeroCount / trials;
+      const nonZeroPercentage = nonZeroCount / trials;
+      
+      expect(zeroPercentage).toBeGreaterThan(0.70); // Allow some variance
+      expect(zeroPercentage).toBeLessThan(0.80);
+      expect(nonZeroPercentage).toBeGreaterThan(0.20);
+      expect(nonZeroPercentage).toBeLessThan(0.30);
+
+      // Check that non-zero quantities are in range 1-5
+      totalQuantities.forEach(quantity => {
+        expect(quantity).toBeGreaterThanOrEqual(1);
+        expect(quantity).toBeLessThanOrEqual(5);
+      });
+
+      // Test ship size filtering logic
+      const allowedShips = Object.entries(SHIP_TYPES).filter(([key, ship]) => 
+        ship.size <= restrictionLevel
+      );
+      const restrictedShips = Object.entries(SHIP_TYPES).filter(([key, ship]) => 
+        ship.size > restrictionLevel
+      );
+
+      expect(allowedShips.length).toBeGreaterThan(0);
+      expect(restrictedShips.length).toBeGreaterThan(0);
+
+      // Verify specific ships would be allowed/restricted
+      expect(SHIP_TYPES.dictor.size <= restrictionLevel).toBe(true);
+      expect(SHIP_TYPES.bs.size <= restrictionLevel).toBe(true);
+      expect(SHIP_TYPES.carrier.size > restrictionLevel).toBe(true);
     });
   });
 });

@@ -295,6 +295,7 @@ class GameMode extends GameModeBase {
     
     console.log(`🎮 Game Mode Initialized:`);
     console.log(`  Wormhole Type: ${baseSize} Gg (${currentState} state)`);
+    console.log(`  Ship Restrictions: Up to ${this.initialWhRestriction ? WORMHOLE_RESTRICTIONS[this.initialWhRestriction] : 'Not Set'}`);
     console.log(`  Original Full Capacity: ${this.originalWormholeMass} Gg (hidden)`);
     console.log(`  Current Remaining: ${this.remainingMass} Gg (hidden)`);
     console.log(`  State Boundaries 100/50/10% = ${freshThreshold} Gg / ${stableThreshold} Gg / ${destabThreshold} Gg`);
@@ -335,8 +336,11 @@ class WormholeRollingUI {
     this.getShipMode = null;
     this.getWhSize = null;
     this.getWhState = null;
+    this.getWhRestriction = null;
     this.initialWhSize = null;
     this.initialWhState = null;
+    this.initialWhRestriction = null;
+    this.initialFarSideFleet = {};  // Ships initially on far side at setup
     this.currentWhState = null;
     this.isTracking = false;
     this.shipsOnFarSide = {};    // Track ships that have gone to the other side
@@ -367,6 +371,20 @@ class WormholeRollingUI {
     };
     this.getWhState = renderOptionButtons('wh-state-options', initialWhStates, null, 'fresh');
     
+    // Wormhole size restrictions
+    this.getWhRestriction = renderOptionButtons('wh-restriction-options', WORMHOLE_RESTRICTIONS, null, '3');
+    
+    // Far side fleet setup
+    this.setupFarSideFleet();
+    
+    // Add listener to restriction changes to update far side fleet
+    document.getElementById('wh-restriction-options').addEventListener('click', (e) => {
+      if (e.target.classList.contains('option-btn')) {
+        // Small delay to let the selection update
+        setTimeout(() => this.renderFarSideFleetUI(), 10);
+      }
+    });
+    
     this.setupEventListeners();
     this.setupModeHandlers();
     
@@ -375,6 +393,65 @@ class WormholeRollingUI {
     if (randomButtonContainer) {
       randomButtonContainer.style.display = 'none'; // Hidden by default (tracker mode)
     }
+  }
+  
+  setupFarSideFleet() {
+    // Initialize far side fleet quantities to 0 for all ships
+    this.initialFarSideFleet = {};
+    Object.keys(SHIP_TYPES).forEach(shipKey => {
+      this.initialFarSideFleet[shipKey] = 0;
+    });
+    
+    this.renderFarSideFleetUI();
+  }
+  
+  renderFarSideFleetUI() {
+    const container = document.getElementById('far-side-fleet-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Get current restriction level to filter ships
+    const currentRestriction = this.getWhRestriction ? this.getWhRestriction() : 5;
+    
+    Object.keys(SHIP_TYPES).forEach(shipKey => {
+      const ship = SHIP_TYPES[shipKey];
+      const quantity = this.initialFarSideFleet[shipKey] || 0;
+      const isDisabled = ship.size > currentRestriction;
+      
+      const shipRow = document.createElement('div');
+      shipRow.className = `far-side-ship-row ${isDisabled ? 'disabled' : ''}`;
+      
+      shipRow.innerHTML = `
+        <div class="far-side-ship-name ${isDisabled ? 'disabled' : ''}">${ship.name}</div>
+        <div class="far-side-controls">
+          <button class="far-side-btn" data-action="decrease" data-ship="${shipKey}" ${isDisabled || quantity === 0 ? 'disabled' : ''}>−</button>
+          <div class="far-side-quantity">${quantity}</div>
+          <button class="far-side-btn" data-action="increase" data-ship="${shipKey}" ${isDisabled ? 'disabled' : ''}>+</button>
+        </div>
+      `;
+      
+      container.appendChild(shipRow);
+    });
+    
+    // Add event listeners for the +/- buttons
+    container.querySelectorAll('.far-side-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        const shipKey = e.target.dataset.ship;
+        this.updateFarSideQuantity(shipKey, action);
+      });
+    });
+  }
+  
+  updateFarSideQuantity(shipKey, action) {
+    if (action === 'increase') {
+      this.initialFarSideFleet[shipKey] = (this.initialFarSideFleet[shipKey] || 0) + 1;
+    } else if (action === 'decrease') {
+      this.initialFarSideFleet[shipKey] = Math.max(0, (this.initialFarSideFleet[shipKey] || 0) - 1);
+    }
+    
+    this.renderFarSideFleetUI();
   }
   
   setupModeHandlers() {
@@ -403,7 +480,7 @@ class WormholeRollingUI {
     // Show/hide random button based on mode
     const randomButtonContainer = document.querySelector('.random-button-container');
     if (randomButtonContainer) {
-      randomButtonContainer.style.display = newMode === this.gameMode ? 'block' : 'none';
+      randomButtonContainer.style.display = newMode === this.gameMode ? 'flex' : 'none';
     }
     
     // Update title if needed
@@ -435,13 +512,19 @@ class WormholeRollingUI {
     const initialStates = ['fresh', 'stable', 'destab', 'critical'];
     const randomState = initialStates[Math.floor(Math.random() * initialStates.length)];
     
+    // Randomly select wormhole restriction
+    const restrictions = Object.keys(WORMHOLE_RESTRICTIONS);
+    const randomRestriction = restrictions[Math.floor(Math.random() * restrictions.length)];
+    
     // Update the UI to reflect random selection
     const sizeButtons = document.querySelectorAll('#wh-size-options .option-btn');
     const stateButtons = document.querySelectorAll('#wh-state-options .option-btn');
+    const restrictionButtons = document.querySelectorAll('#wh-restriction-options .option-btn');
     
     // Clear all selections
     sizeButtons.forEach(btn => btn.classList.remove('selected'));
     stateButtons.forEach(btn => btn.classList.remove('selected'));
+    restrictionButtons.forEach(btn => btn.classList.remove('selected'));
     
     // Select the random options by triggering click events (updates closures)
     sizeButtons.forEach(btn => {
@@ -456,7 +539,45 @@ class WormholeRollingUI {
       }
     });
     
-    console.log(`Random setup: ${randomSize} Gg wormhole in ${randomState} state`);
+    restrictionButtons.forEach(btn => {
+      if (btn.dataset.value === randomRestriction) {
+        btn.click();
+      }
+    });
+    
+    // Randomize far side fleet
+    this.randomizeFarSideFleet(parseInt(randomRestriction));
+    
+    console.log(`Random setup: ${randomSize} Gg wormhole in ${randomState} state, ${WORMHOLE_RESTRICTIONS[randomRestriction]}`);
+  }
+  
+  randomizeFarSideFleet(restrictionLevel) {
+    // Reset all ships to 0
+    Object.keys(SHIP_TYPES).forEach(shipKey => {
+      this.initialFarSideFleet[shipKey] = 0;
+    });
+    
+    // For each valid ship type (respecting size restrictions)
+    Object.entries(SHIP_TYPES).forEach(([shipKey, ship]) => {
+      if (ship.size <= restrictionLevel) {
+        // 75% chance of 0, 25% chance of 1-5
+        const roll = Math.random();
+        if (roll > 0.75) { // 25% chance of non-zero
+          this.initialFarSideFleet[shipKey] = Math.floor(Math.random() * 5) + 1; // 1-5
+        }
+      }
+    });
+    
+    // Update the UI to reflect random far side fleet
+    this.renderFarSideFleetUI();
+    
+    // Log the random fleet for debugging
+    const fleetSummary = this.getShipsOnFarSideDescription(this.initialFarSideFleet);
+    if (fleetSummary) {
+      console.log(`Random far side fleet: ${fleetSummary}`);
+    } else {
+      console.log('Random far side fleet: None');
+    }
   }
   
   setupEventListeners() {
@@ -549,6 +670,17 @@ class WormholeRollingUI {
   
   getCurrentWormhole() {
     return new Wormhole(this.initialWhSize, this.currentWhState);
+  }
+  
+  getShipsOnFarSideDescription(shipsObj) {
+    const shipCounts = [];
+    Object.entries(shipsObj).forEach(([shipKey, count]) => {
+      if (count > 0) {
+        const shipName = SHIP_TYPES[shipKey].name;
+        shipCounts.push(count === 1 ? shipName : `${count}x ${shipName}`);
+      }
+    });
+    return shipCounts.length > 0 ? shipCounts.join(', ') : null;
   }
   
   // APPLY FUNCTIONS - Process staged actions and update state
@@ -739,13 +871,21 @@ class WormholeRollingUI {
     
     // Add initial setup log
     const stateText = WORMHOLE_STATES[this.initialWhState];
+    const restrictionText = WORMHOLE_RESTRICTIONS[this.initialWhRestriction];
     html += `<div class="log-header">`;
-    html += `<div><strong>Initial Setup:</strong> ${this.initialWhSize} Gg wormhole in ${stateText} state</div>`;
+    html += `<div><strong>Initial Setup:</strong> ${this.initialWhSize} Gg wormhole in ${stateText} state, up to ${restrictionText}</div>`;
     
     // Show the initial starting mass range (never changes)
     const initialWormhole = new Wormhole(this.initialWhSize, this.initialWhState);
     const initialMass = initialWormhole.getCurrentMassRange();
     html += `<div><strong>Starting Mass Range:</strong> ${Math.round(initialMass.min)} - ${Math.round(initialMass.max)} Gg</div>`;
+    
+    // Show initial far side fleet if any
+    const initialFarSideShips = this.getShipsOnFarSideDescription(this.initialFarSideFleet);
+    if (initialFarSideShips) {
+      html += `<div><strong>Initial Far Side Fleet:</strong> ${initialFarSideShips}</div>`;
+    }
+    
     html += `</div>`;
     
     this.committedActions.forEach((entry, entryIndex) => {
@@ -802,11 +942,16 @@ class WormholeRollingUI {
       
       // Show ships on far side
       if (entry.shipsOnFarSide && Object.keys(entry.shipsOnFarSide).length > 0) {
-        html += `<div class="log-far-side"><strong>Ships on Far Side:</strong><br>`;
         const shipList = Object.entries(entry.shipsOnFarSide)
+          .filter(([shipType, count]) => count > 0) // Only show ships with count > 0
           .map(([shipType, count]) => `${SHIP_TYPES[shipType].name} x${count}`)
           .join(', ');
-        html += `${shipList}</div>`;
+        
+        if (shipList.length > 0) {
+          html += `<div class="log-far-side"><strong>Ships on Far Side:</strong><br>${shipList}</div>`;
+        } else {
+          html += `<div class="log-far-side"><strong>Ships on Far Side:</strong><br>None</div>`;
+        }
       } else {
         html += `<div class="log-far-side"><strong>Ships on Far Side:</strong><br>None</div>`;
       }
@@ -837,19 +982,63 @@ class WormholeRollingUI {
     this.renderActionsList();
   }
   
+  setupShipSelection() {
+    const container = document.getElementById('ship-type-options');
+    container.innerHTML = '';
+    let selected = 'rbs'; // Default selection
+    
+    Object.entries(SHIP_TYPES).forEach(([key, data]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.value = key;
+      btn.textContent = data.name;
+      
+      // Check if ship exceeds wormhole size restriction
+      const shipSize = data.size;
+      const maxAllowedSize = this.initialWhRestriction;
+      const isDisabled = shipSize > maxAllowedSize;
+      
+      if (isDisabled) {
+        btn.className = 'option-btn disabled';
+        btn.disabled = true;
+        btn.title = `Ship too large for this wormhole (size ${shipSize} > ${maxAllowedSize})`;
+      } else {
+        btn.className = 'option-btn' + (key === 'rbs' ? ' selected' : '');
+        btn.addEventListener('click', () => {
+          Array.from(container.children).forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selected = key;
+        });
+      }
+      
+      container.appendChild(btn);
+    });
+    
+    // If default selection is disabled, find the first enabled ship
+    if (SHIP_TYPES[selected].size > this.initialWhRestriction) {
+      const firstEnabledShip = Object.entries(SHIP_TYPES).find(([key, data]) => data.size <= this.initialWhRestriction);
+      if (firstEnabledShip) {
+        selected = firstEnabledShip[0];
+        container.querySelector(`[data-value="${selected}"]`).classList.add('selected');
+      }
+    }
+    
+    this.getShipType = () => selected;
+  }
+  
   startTracking() {
     // Store initial values
     this.initialWhSize = parseInt(this.getWhSize());
     this.initialWhState = this.getWhState();
+    this.initialWhRestriction = parseInt(this.getWhRestriction());
     this.currentWhState = this.initialWhState;
     this.isTracking = true;
     
-    // Setup ship selection after tracking starts
-    const shipTypeOptions = {};
-    Object.entries(SHIP_TYPES).forEach(([key, data]) => {
-      shipTypeOptions[key] = data.name;
-    });
-    this.getShipType = renderOptionButtons('ship-type-options', shipTypeOptions, null, 'rbs');
+    // Initialize far side fleet from initial setup
+    this.shipsOnFarSide = { ...this.initialFarSideFleet };
+    
+    // Setup ship selection after tracking starts with size restrictions
+    this.setupShipSelection();
     this.getShipMode = renderOptionButtons('ship-mode-options', SHIP_MODES, null, 'unknown');
     
     // Add event listener to show/hide custom mass input
@@ -883,8 +1072,10 @@ class WormholeRollingUI {
     if (addActionRow) addActionRow.style.display = 'none';
     if (applySection) applySection.style.display = 'none';
     
-    // Show completion message
-    const hasShipsOnFarSide = Object.keys(this.shipsOnFarSide).length > 0;
+    // Show completion message - check if we have MORE ships on far side than initially
+    const currentFarSideCount = Object.values(this.shipsOnFarSide).reduce((sum, count) => sum + count, 0);
+    const initialFarSideCount = Object.values(this.initialFarSideFleet).reduce((sum, count) => sum + count, 0);
+    const hasStrandedShips = currentFarSideCount > initialFarSideCount;
     
     const successMessages = [
       "🎉 Rolling Complete - you successfully rolled the shit out of that wormhole",
@@ -932,15 +1123,15 @@ class WormholeRollingUI {
       "⚰️ DELETE CHARACTER: You're too stupid to exist in New Eden, biomass yourself"
     ];
     
-    const messageArray = hasShipsOnFarSide ? failureMessages : successMessages;
+    const messageArray = hasStrandedShips ? failureMessages : successMessages;
     const completionMessage = messageArray[Math.floor(Math.random() * messageArray.length)];
     
     // Create clear summary text
     let summaryText = '';
-    if (hasShipsOnFarSide) {
-      // Count total stranded ships
-      const totalStranded = Object.values(this.shipsOnFarSide).reduce((sum, count) => sum + count, 0);
-      summaryText = `Failure - wormhole rolled, but you stranded ${totalStranded} ship${totalStranded !== 1 ? 's' : ''}`;
+    if (hasStrandedShips) {
+      // Count newly stranded ships (difference between current and initial)
+      const newlyStranded = currentFarSideCount - initialFarSideCount;
+      summaryText = `Failure - wormhole rolled, but you stranded ${newlyStranded} ship${newlyStranded !== 1 ? 's' : ''}`;
     } else {
       summaryText = 'Success - wormhole rolled, and all ships ended up on the correct side';
     }
@@ -950,7 +1141,7 @@ class WormholeRollingUI {
     completionSection.id = 'completion-section';
     completionSection.className = 'completion-section';
     completionSection.innerHTML = `
-      <div class="completion-message ${hasShipsOnFarSide ? 'completion-failure' : 'completion-success'}">
+      <div class="completion-message ${hasStrandedShips ? 'completion-failure' : 'completion-success'}">
         ${completionMessage}
       </div>
       <div class="completion-summary">
@@ -1000,6 +1191,7 @@ class WormholeRollingUI {
     this.isTracking = false;
     this.initialWhSize = null;
     this.initialWhState = null;
+    this.initialWhRestriction = null;
     this.currentWhState = null;
     this.shipsOnFarSide = {};
     

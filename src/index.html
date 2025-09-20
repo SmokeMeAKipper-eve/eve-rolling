@@ -15,19 +15,36 @@
     </div>
     <div id="initial-setup">
       <form id="planner-form">
-        <div class="option-group">
-          <div class="option-label">Wormhole Size:</div>
-          <div id="wh-size-options" class="option-row"></div>
+        <div class="setup-split-container">
+          <div class="setup-left-side">
+            <div class="option-group">
+              <div class="option-label">Wormhole Size:</div>
+              <div id="wh-size-options" class="option-row"></div>
+            </div>
+            <div class="option-group">
+              <div class="option-label">Initial Wormhole State:</div>
+              <div id="wh-state-options" class="option-row"></div>
+            </div>
+            <div class="option-group">
+              <div class="option-label">Wormhole Size Restrictions:</div>
+              <div id="wh-restriction-options" class="option-row"></div>
+            </div>
+          </div>
+          <div class="setup-right-side">
+            <div class="option-group">
+              <div class="option-label">Far Side Fleet (Optional):</div>
+              <div class="far-side-instructions">Ships already on the far side of the wormhole</div>
+              <div id="far-side-fleet-list" class="far-side-fleet-list"></div>
+            </div>
+          </div>
         </div>
-        <div class="option-group">
-          <div class="option-label">Initial Wormhole State:</div>
-          <div id="wh-state-options" class="option-row"></div>
-        </div>
-        <div class="random-button-container">
-          <button id="random-setup" type="button" class="random-btn">🎲 Random Setup</button>
-        </div>
-        <div class="go-button-container">
-          <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
+        <div class="setup-buttons-container">
+          <div class="random-button-container">
+            <button id="random-setup" type="button" class="random-btn">🎲 Random Setup</button>
+          </div>
+          <div class="go-button-container">
+            <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
+          </div>
         </div>
       </form>
     </div>

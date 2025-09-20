@@ -2,12 +2,14 @@
 // Extracted for unit testing
 
 const SHIP_TYPES = {
-  'rbs': { name: 'Rolling Battleship', cold: 200, hot: 300 },
-  'rhic': { name: 'Rolling Hictor', cold: 1, hot: 65 },
-  'carrier': { name: 'Carrier', cold: 1250, hot: 1750 },
-  'bs': { name: 'Battleship', cold: 100, hot: 150 },
-  'marauder': { name: 'Marauder', cold: 160, hot: 210 },
-  'cruiser': { name: 'Cruiser', cold: 13, hot: 63 }
+  'rbs': { name: 'Rolling Battleship', cold: 200, hot: 300, size: 3 },
+  'rhic': { name: 'Rolling Hictor', cold: 1, hot: 65, size: 2 },
+  'carrier': { name: 'Carrier', cold: 1250, hot: 1750, size: 5 },
+  'bs': { name: 'Battleship', cold: 100, hot: 150, size: 3 },
+  'marauder': { name: 'Marauder', cold: 160, hot: 210, size: 3 },
+  'cruiser': { name: 'Cruiser', cold: 13, hot: 63, size: 2 },
+  'dictor': { name: 'Dictor', cold: 1, hot: 2, size: 1 },
+  'covops': { name: 'CovOps', cold: 1, hot: 2, size: 1 },
 };
 
 const WORMHOLE_MASS_TYPES = [100, 500, 750, 1000, 2000, 3000, 3300, 5000];
@@ -25,6 +27,14 @@ const WORMHOLE_STATES = {
   'destab': 'Destab',
   'critical': 'Critical',
   'gone': 'Gone'
+};
+
+const WORMHOLE_RESTRICTIONS = {
+  1: 'up to Destroyer',
+  2: 'up to Battlecruiser',
+  3: 'up to Battleship',
+  4: 'up to Freighter',
+  5: 'up to Capital'
 };
 
 class Wormhole {
@@ -193,6 +203,7 @@ if (typeof module !== 'undefined' && module.exports) {
     WORMHOLE_MASS_TYPES,
     SHIP_MODES,
     WORMHOLE_STATES,
+    WORMHOLE_RESTRICTIONS,
     Wormhole,
     Ship,
     CustomMass,
@@ -206,6 +217,7 @@ if (typeof window !== 'undefined') {
   window.WORMHOLE_MASS_TYPES = WORMHOLE_MASS_TYPES;
   window.SHIP_MODES = SHIP_MODES;
   window.WORMHOLE_STATES = WORMHOLE_STATES;
+  window.WORMHOLE_RESTRICTIONS = WORMHOLE_RESTRICTIONS;
   window.Wormhole = Wormhole;
   window.Ship = Ship;
   window.CustomMass = CustomMass;
