@@ -1,0 +1,17 @@
+{
+  "name": "eve-wormhole-rolling-planner",
+  "version": "1.0.0",
+  "description": "EVE Online wormhole rolling planner with mass calculations",
+  "main": "src/app.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"]
+  }
+}

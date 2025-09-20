@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVE Wormhole Rolling Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>EVE Wormhole Rolling Tracker</h1>
+    <div id="initial-setup">
+      <form id="planner-form">
+        <div class="option-group">
+          <div class="option-label">Wormhole Size:</div>
+          <div id="wh-size-options" class="option-row"></div>
+        </div>
+        <div class="option-group">
+          <div class="option-label">Initial Wormhole State:</div>
+          <div id="wh-state-options" class="option-row"></div>
+        </div>
+        <div class="go-button-container">
+          <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
+        </div>
+      </form>
+    </div>
+    <div id="tracking-interface" style="display: none;">
+      <hr class="divider">
+      <div id="mass-range-display"></div>
+      <div id="actions-list"></div>
+      
+      <div id="staging-section" style="display: none;">
+        <div class="staging-header">Staged Actions (Not Applied Yet):</div>
+        <div id="staged-actions-list"></div>
+      </div>
+      
+      <div id="add-action-row" class="action-row">
+        <button id="add-action-incoming" type="button" class="option-btn">&lt;&lt; Incoming</button>
+        <div style="flex:1; display:flex; justify-content:center; align-items:flex-start; padding:0 16px;">
+          <div class="ship-selection-container" style="display:flex; flex-direction:column; align-items:center;">
+            <div id="ship-type-options" class="ship-select-row"></div>
+            <div class="ship-mode-row" style="margin-top:8px; display:flex; align-items:center; gap:12px;">
+              <div id="ship-mode-options" class="ship-select-row"></div>
+              <div class="custom-mass-container" style="display:none; align-items:center; gap:8px;">
+                <label for="custom-mass-input" style="font-size:0.9em; color:#e0e0e0; white-space:nowrap;">mass:</label>
+                <input id="custom-mass-input" type="number" min="0" placeholder="123" style="width:80px; padding:6px 8px; border-radius:6px; border:1px solid #444; background:#181a20; color:#e0e0e0; font-size:14px;">
+                <span style="font-size:0.85em; color:#888;">Gg</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button id="add-action-outgoing" type="button" class="option-btn">Outgoing &gt;&gt;</button>
+      </div>
+      
+      <div class="apply-section">
+        <div class="apply-label">Apply Staged Actions With State:</div>
+        <div class="apply-buttons">
+          <button id="apply-no-change" type="button" class="apply-btn">Apply - No State Change</button>
+          <button id="apply-destab" type="button" class="apply-btn destab">Apply - Wormhole is now Destabilized</button>
+          <button id="apply-critical" type="button" class="apply-btn critical">Apply - Wormhole is now Critical</button>
+          <button id="apply-gone" type="button" class="apply-btn gone">Apply - Wormhole is Gone</button>
+        </div>
+        <div id="apply-message" class="apply-message"></div>
+      </div>
+      
+      <div class="reset-section">
+        <button id="reset-all" type="button" class="reset-btn">Reset All</button>
+      </div>
+    </div>
+  </div>
+  <script src="wormhole-logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
