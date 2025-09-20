@@ -8,7 +8,11 @@
 </head>
 <body>
   <div class="container">
-    <h1>EVE Wormhole Rolling Tracker</h1>
+    <div class="header-with-modes">
+      <button id="tracker-mode-btn" class="mode-btn active">Tracker Mode</button>
+      <h1>EVE Wormhole Rolling Tracker</h1>
+      <button id="game-mode-btn" class="mode-btn">Game Mode</button>
+    </div>
     <div id="initial-setup">
       <form id="planner-form">
         <div class="option-group">
@@ -18,6 +22,9 @@
         <div class="option-group">
           <div class="option-label">Initial Wormhole State:</div>
           <div id="wh-state-options" class="option-row"></div>
+        </div>
+        <div class="random-button-container">
+          <button id="random-setup" type="button" class="random-btn">🎲 Random Setup</button>
         </div>
         <div class="go-button-container">
           <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
@@ -61,6 +68,14 @@
           <button id="apply-gone" type="button" class="apply-btn gone">Apply - Wormhole is Gone</button>
         </div>
         <div id="apply-message" class="apply-message"></div>
+      </div>
+      
+      <div id="game-mode-section" class="game-mode-section" style="display: none;">
+        <div class="game-action-label">Send Ship Through Wormhole:</div>
+        <div class="game-action-buttons">
+          <button id="game-send" type="button" class="game-send-btn">🚀 Send & See What Happens</button>
+        </div>
+        <div id="game-result-message" class="game-result-message"></div>
       </div>
       
       <div class="reset-section">

@@ -1,5 +1,311 @@
 // UI logic
 
+// Abstract base class for different modes
+class GameModeBase {
+  constructor(ui) {
+    this.ui = ui;
+  }
+  
+  // Abstract methods to be implemented by subclasses
+  setupActionInterface() { throw new Error('Must implement setupActionInterface'); }
+  handleAddAction(direction, ship) { throw new Error('Must implement handleAddAction'); }
+  getModeName() { throw new Error('Must implement getModeName'); }
+  getDescription() { throw new Error('Must implement getDescription'); }
+}
+
+// Tracker Mode - existing functionality (staging, manual outcomes)
+class TrackerMode extends GameModeBase {
+  constructor(ui) {
+    super(ui);
+  }
+  
+  getModeName() {
+    return 'Tracker Mode';
+  }
+  
+  getDescription() {
+    return 'Track your actual in-game wormhole rolling operations';
+  }
+  
+  setupActionInterface() {
+    // Show staging section and apply buttons (existing behavior)
+    document.getElementById('staging-section').style.display = 'block';
+    document.querySelector('.apply-section').style.display = 'block';
+    
+    // Hide game mode section
+    document.getElementById('game-mode-section').style.display = 'none';
+  }
+  
+  handleAddAction(direction, ship) {
+    // For tracker mode, add to staging (this is called from stageAction)
+    const action = new Action(ship, direction);
+    this.ui.stagedActions.push(action);
+    this.ui.renderStagedActions();
+  }
+}
+
+// Game Mode - new gameplay mode (immediate outcomes, hidden mass)
+class GameMode extends GameModeBase {
+  constructor(ui) {
+    super(ui);
+    this.actualWormholeMass = null; // Hidden actual mass
+    this.initialActualMass = null;  // Starting mass for reference
+    this.remainingMass = null;      // Current remaining mass
+  }
+  
+  getModeName() {
+    return 'Game Mode';
+  }
+  
+  getDescription() {
+    return 'Play wormhole rolling as a game with hidden actual mass';
+  }
+  
+  setupActionInterface() {
+    // Hide staging section, apply section, and game mode section
+    document.getElementById('staging-section').style.display = 'none';
+    document.querySelector('.apply-section').style.display = 'none';
+    document.getElementById('game-mode-section').style.display = 'none';
+    
+    // In game mode, incoming/outgoing buttons act as immediate send buttons
+    // No additional UI needed - the ship selection and direction buttons are sufficient
+  }
+  
+  handleAddAction(direction, ship) {
+    // Apply action against hidden actual mass immediately
+    const action = new Action(ship, direction);
+    const shipMass = ship.getMass();
+    
+    // For hidden mass calculation: use exact value if available, otherwise randomly select
+    let actualMassUsed;
+    if (shipMass.min === shipMass.max) {
+      actualMassUsed = shipMass.min;
+    } else {
+      // For unknown mode, randomly select hot or cold for actual calculation
+      actualMassUsed = Math.random() < 0.5 ? shipMass.min : shipMass.max;
+    }
+    
+    // Apply mass reduction to hidden mass
+    this.remainingMass -= actualMassUsed;
+    
+    // Track ships on far side for win/loss determination
+    if (direction === 'B' && ship.type) {
+      // Ship going to far side (outgoing)
+      const shipKey = ship.type;
+      this.ui.shipsOnFarSide[shipKey] = (this.ui.shipsOnFarSide[shipKey] || 0) + 1;
+    } else if (direction === 'A' && ship.type) {
+      // Ship coming back from far side (incoming)
+      const shipKey = ship.type; 
+      if (this.ui.shipsOnFarSide[shipKey] && this.ui.shipsOnFarSide[shipKey] > 0) {
+        this.ui.shipsOnFarSide[shipKey]--;
+        if (this.ui.shipsOnFarSide[shipKey] === 0) {
+          delete this.ui.shipsOnFarSide[shipKey];
+        }
+      }
+    }
+    
+    // Determine outcome based on hidden remaining mass first
+    const outcome = this.determineOutcome();
+    
+    // Check if state actually changed to avoid duplicate messages
+    const previousState = this.ui.currentWhState;
+    const stateChanged = outcome.newState !== 'no-change' && outcome.newState !== previousState;
+    
+    // Update current state if it changed (do this BEFORE calculating displayed mass)
+    if (outcome.newState !== 'no-change') {
+      this.ui.currentWhState = outcome.newState;
+    }
+    
+    // For display purposes: calculate what the player should see (tracker-style ranges)
+    let displayedResultMass;
+    if (outcome.newState === 'gone') {
+      // If wormhole collapsed, show that it's gone
+      displayedResultMass = { min: 0, max: 0 };
+    } else {
+      // Normal case: Start with current displayed mass range and apply action like tracker mode
+      const currentDisplayedMass = this.ui.calculateCurrentMass();
+      displayedResultMass = action.applyToMass(currentDisplayedMass);
+      
+      // Apply state boundaries to displayed mass (what player sees) - now using updated state
+      const currentWormhole = this.ui.getCurrentWormhole();
+      const stateBoundaries = currentWormhole.getStateBoundaries();
+      displayedResultMass.min = Math.max(displayedResultMass.min, stateBoundaries.min);
+      displayedResultMass.max = Math.min(displayedResultMass.max, stateBoundaries.max);
+      displayedResultMass.min = Math.min(displayedResultMass.min, displayedResultMass.max);
+    }
+    
+    // Create snapshot of ships on far side for display
+    const farSideSnapshot = { ...this.ui.shipsOnFarSide };
+    
+    // Add to committed actions log (using displayed mass for player, hidden mass for game logic)
+    this.ui.committedActions.push({
+      actions: [action],
+      actualMassUsed: actualMassUsed, // Hidden from player in normal display
+      remainingMass: this.remainingMass, // Hidden actual remaining mass
+      outcome: outcome,
+      stateChange: outcome.newState,
+      currentState: this.ui.currentWhState, // Current state after this action
+      finalMass: displayedResultMass, // What player sees (ranges)
+      shipsOnFarSide: farSideSnapshot, // For display and win/loss logic
+      timestamp: Date.now()
+    });
+    
+    // Show result to player ONLY if state changed or wormhole collapsed
+    if (stateChanged || outcome.newState === 'gone') {
+      this.ui.showGameResult(outcome.message, outcome.type);
+    }
+    
+    // Update displays
+    this.ui.renderActionsList();
+    
+    // Handle game over
+    if (outcome.newState === 'gone') {
+      this.ui.handleWormholeCompletion();
+    }
+    
+    console.log(`🎮 Game Action: ${ship.getDisplayName()} ${direction === 'A' ? 'incoming' : 'outgoing'}`);
+    console.log(`  Actual mass used: ${actualMassUsed} Gg (hidden)`);
+    console.log(`  Hidden remaining mass: ${this.remainingMass} Gg`);
+    console.log(`  State Boundaries 100/50/10% = ${this.initialActualMass}Gg / ${Math.floor(this.initialActualMass * 0.5)}Gg / ${Math.floor(this.initialActualMass * 0.1)}Gg`);
+    console.log(`  Player sees range: ${Math.round(displayedResultMass.min)} - ${Math.round(displayedResultMass.max)} Gg`);
+    console.log(`  Outcome: ${outcome.message}`);
+    
+    // ERROR CHECK: Hidden mass should always be within displayed range (unless collapsed)
+    if (outcome.newState !== 'gone' && this.remainingMass > 0 && (this.remainingMass < displayedResultMass.min || this.remainingMass > displayedResultMass.max)) {
+      console.error(`🚨 CONSISTENCY ERROR: Hidden mass ${this.remainingMass} Gg is outside displayed range ${Math.round(displayedResultMass.min)} - ${Math.round(displayedResultMass.max)} Gg`);
+      console.error(`  This indicates a bug in our calculation logic!`);
+    } else if (outcome.newState === 'gone' && this.remainingMass > 0) {
+      console.error(`🚨 CONSISTENCY ERROR: Wormhole showing as collapsed but hidden mass is positive: ${this.remainingMass} Gg`);
+    }
+  }
+  
+  determineOutcome() {
+    const wormhole = this.ui.getCurrentWormhole();
+    const originalRange = new Wormhole(this.ui.initialWhSize, this.ui.initialWhState).getCurrentMassRange();
+    
+    // Calculate percentage of original mass remaining
+    const percentRemaining = (this.remainingMass / this.initialActualMass) * 100;
+    const currentState = this.ui.currentWhState;
+    
+    // Determine what state the wormhole should be in based on mass
+    let targetState;
+    if (this.remainingMass <= 0) {
+      targetState = 'gone';
+    } else if (percentRemaining <= 10) {
+      targetState = 'critical';
+    } else if (percentRemaining <= 50) {
+      targetState = 'destab';
+    } else if (currentState === 'fresh' && percentRemaining <= 100) {
+      targetState = 'stable';
+    } else {
+      targetState = currentState; // No state change
+    }
+    
+    // Handle collapsed wormhole (always shows message)
+    if (targetState === 'gone') {
+      return {
+        newState: 'gone',
+        message: '💥 Wormhole Collapsed! The ship made it through just as the wormhole died.',
+        type: 'collapse'
+      };
+    }
+    
+    // Check if state is actually changing
+    if (targetState !== currentState) {
+      // State is changing - show appropriate transition message
+      switch (targetState) {
+        case 'critical':
+          return {
+            newState: 'critical',
+            message: '🔴 Wormhole is now CRITICAL! It\'s barely holding together.',
+            type: 'critical'
+          };
+        case 'destab':
+          return {
+            newState: 'destab',
+            message: '🟠 Wormhole DESTABILIZED! It\'s getting wobbly.',
+            type: 'destab'
+          };
+        case 'stable':
+          return {
+            newState: 'stable',
+            message: '🟡 Wormhole is now STABLE. Some mass used but still solid.',
+            type: 'stable'
+          };
+        default:
+          return {
+            newState: 'no-change',
+            message: '✅ Ship passed through safely. No visible change to wormhole.',
+            type: 'success'
+          };
+      }
+    } else {
+      // No state change - ship passed through but wormhole state unchanged
+      return {
+        newState: 'no-change',
+        message: '✅ Ship passed through safely. No visible change to wormhole.',
+        type: 'success'
+      };
+    }
+  }
+  
+  initializeGame() {
+    // Step 1: Determine the original wormhole's full capacity (100% with variance)
+    const baseSize = this.ui.initialWhSize;
+    const variance = 0.1;
+    const minOriginal = Math.round(baseSize * (1 - variance));
+    const maxOriginal = Math.round(baseSize * (1 + variance));
+    
+    // Randomly select the original full capacity
+    this.originalWormholeMass = Math.floor(Math.random() * (maxOriginal - minOriginal + 1)) + minOriginal;
+    
+    // Step 2: Based on current state, determine how much mass remains
+    // This simulates unknown ships having already passed through
+    const currentState = this.ui.initialWhState;
+    let remainingPercent;
+    
+    switch (currentState) {
+      case 'fresh':
+        remainingPercent = 1.0; // 100% remaining (no ships have passed)
+        break;
+      case 'stable':
+        remainingPercent = 0.5 + Math.random() * 0.5; // 50-100% remaining  
+        break;
+      case 'destab':
+        remainingPercent = 0.1 + Math.random() * 0.4; // 10-50% remaining
+        break;
+      case 'critical':
+        remainingPercent = Math.random() * 0.1; // 0-10% remaining
+        break;
+      default:
+        remainingPercent = 1.0; // Default to fresh
+    }
+    
+    // Calculate current remaining mass
+    this.remainingMass = Math.floor(this.originalWormholeMass * remainingPercent);
+    
+    // Display information for current state (what player can see)
+    const currentWormhole = this.ui.getCurrentWormhole();
+    const visibleRange = currentWormhole.getCurrentMassRange();
+    
+    // Calculate state transition boundaries based on actual original mass
+    const freshThreshold = this.originalWormholeMass;                      // 100%
+    const stableThreshold = Math.floor(this.originalWormholeMass * 0.5);   // 50%
+    const destabThreshold = Math.floor(this.originalWormholeMass * 0.1);   // 10%
+    
+    console.log(`🎮 Game Mode Initialized:`);
+    console.log(`  Wormhole Type: ${baseSize} Gg (${currentState} state)`);
+    console.log(`  Original Full Capacity: ${this.originalWormholeMass} Gg (hidden)`);
+    console.log(`  Current Remaining: ${this.remainingMass} Gg (hidden)`);
+    console.log(`  State Boundaries 100/50/10% = ${freshThreshold} Gg / ${stableThreshold} Gg / ${destabThreshold} Gg`);
+    console.log(`  Player Sees Range: ${Math.floor(visibleRange.min)} - ${Math.floor(visibleRange.max)} Gg`);
+    console.log(`  Remaining Percentage: ${Math.round(remainingPercent * 100)}% of original`);
+    
+    // Store initial values for game tracking
+    this.initialActualMass = this.originalWormholeMass; // Use original for percentage calculations
+  }
+}
+
 function renderOptionButtons(containerId, options, formatter, defaultValue) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
@@ -34,9 +340,17 @@ class WormholeRollingUI {
     this.currentWhState = null;
     this.isTracking = false;
     this.shipsOnFarSide = {};    // Track ships that have gone to the other side
+    
+    // Mode system
+    this.currentMode = null;
+    this.trackerMode = new TrackerMode(this);
+    this.gameMode = new GameMode(this);
   }
   
   init() {
+    // Initialize with tracker mode by default
+    this.currentMode = this.trackerMode;
+    
     // Setup initial selection options
     const whSizeOptions = {};
     WORMHOLE_MASS_TYPES.forEach(mass => {
@@ -54,6 +368,95 @@ class WormholeRollingUI {
     this.getWhState = renderOptionButtons('wh-state-options', initialWhStates, null, 'fresh');
     
     this.setupEventListeners();
+    this.setupModeHandlers();
+    
+    // Initialize mode display (hide random button for tracker mode)
+    const randomButtonContainer = document.querySelector('.random-button-container');
+    if (randomButtonContainer) {
+      randomButtonContainer.style.display = 'none'; // Hidden by default (tracker mode)
+    }
+  }
+  
+  setupModeHandlers() {
+    // Mode switching buttons
+    document.getElementById('tracker-mode-btn').addEventListener('click', () => {
+      this.switchToMode(this.trackerMode);
+    });
+    
+    document.getElementById('game-mode-btn').addEventListener('click', () => {
+      this.switchToMode(this.gameMode);
+    });
+  }
+  
+  switchToMode(newMode) {
+    // Reset current session if switching modes while tracking
+    if (this.isTracking) {
+      this.resetAll();
+    }
+    
+    this.currentMode = newMode;
+    
+    // Update button states
+    document.getElementById('tracker-mode-btn').classList.toggle('active', newMode === this.trackerMode);
+    document.getElementById('game-mode-btn').classList.toggle('active', newMode === this.gameMode);
+    
+    // Show/hide random button based on mode
+    const randomButtonContainer = document.querySelector('.random-button-container');
+    if (randomButtonContainer) {
+      randomButtonContainer.style.display = newMode === this.gameMode ? 'block' : 'none';
+    }
+    
+    // Update title if needed
+    const title = document.querySelector('h1');
+    title.textContent = `EVE Wormhole Rolling ${newMode.getModeName()}`;
+    
+    console.log(`Switched to ${newMode.getModeName()}: ${newMode.getDescription()}`);
+  }
+  
+  showGameResult(message, type = 'success') {
+    // Show result message in the apply-message area (reused for game mode)
+    const resultElement = document.getElementById('apply-message');
+    resultElement.textContent = message;
+    resultElement.className = `apply-message game-result-${type}`;
+    
+    // Clear message after a few seconds
+    setTimeout(() => {
+      resultElement.textContent = '';
+      resultElement.className = 'apply-message';
+    }, 4000);
+  }
+  
+  randomizeSetup() {
+    // Randomly select wormhole size
+    const whSizes = WORMHOLE_MASS_TYPES;
+    const randomSize = whSizes[Math.floor(Math.random() * whSizes.length)];
+    
+    // Randomly select initial state (exclude 'gone' as that's not valid for starting)
+    const initialStates = ['fresh', 'stable', 'destab', 'critical'];
+    const randomState = initialStates[Math.floor(Math.random() * initialStates.length)];
+    
+    // Update the UI to reflect random selection
+    const sizeButtons = document.querySelectorAll('#wh-size-options .option-btn');
+    const stateButtons = document.querySelectorAll('#wh-state-options .option-btn');
+    
+    // Clear all selections
+    sizeButtons.forEach(btn => btn.classList.remove('selected'));
+    stateButtons.forEach(btn => btn.classList.remove('selected'));
+    
+    // Select the random options by triggering click events (updates closures)
+    sizeButtons.forEach(btn => {
+      if (btn.dataset.value === randomSize.toString()) {
+        btn.click();
+      }
+    });
+    
+    stateButtons.forEach(btn => {
+      if (btn.dataset.value === randomState) {
+        btn.click();
+      }
+    });
+    
+    console.log(`Random setup: ${randomSize} Gg wormhole in ${randomState} state`);
   }
   
   setupEventListeners() {
@@ -62,12 +465,17 @@ class WormholeRollingUI {
       this.startTracking();
     });
     
+    // Random setup button
+    document.getElementById('random-setup').addEventListener('click', () => {
+      this.randomizeSetup();
+    });
+    
     // Reset button
     document.getElementById('reset-all').addEventListener('click', () => {
       this.resetAll();
     });
     
-    // Action staging buttons
+    // Action buttons - behavior depends on current mode
     document.getElementById('add-action-incoming').addEventListener('click', () => {
       if (this.isTracking) this.stageAction('A');
     });
@@ -75,7 +483,7 @@ class WormholeRollingUI {
       if (this.isTracking) this.stageAction('B');
     });
     
-    // Apply buttons
+    // Apply buttons (tracker mode)
     document.getElementById('apply-no-change').addEventListener('click', () => {
       if (this.isTracking) this.applyStaging('no-change');
     });
@@ -88,9 +496,11 @@ class WormholeRollingUI {
     document.getElementById('apply-gone').addEventListener('click', () => {
       if (this.isTracking) this.applyStaging('gone');
     });
+    
+    // Game mode uses incoming/outgoing buttons directly - no separate send button needed
   }
   
-  // STAGING FUNCTIONS - Build up actions before applying
+  // ACTION PROCESSING - Different behavior for Tracker vs Game mode
   stageAction(direction) {
     const shipMode = this.getShipMode();
     let ship;
@@ -103,17 +513,21 @@ class WormholeRollingUI {
         ship = new CustomMass(customMass);
         input.value = '';
       } else {
-        // If custom mode is selected but no valid mass entered, show error
-        this.showApplyMessage('Please enter a valid custom mass value');
+        // Show error message
+        const errorMsg = 'Please enter a valid custom mass value';
+        if (this.currentMode === this.gameMode) {
+          this.showGameResult(errorMsg, 'error');
+        } else {
+          this.showApplyMessage(errorMsg);
+        }
         return;
       }
     } else {
       ship = new Ship(this.getShipType(), shipMode);
     }
     
-    const action = new Action(ship, direction);
-    this.stagedActions.push(action);
-    this.renderStagedActions();
+    // Delegate to current mode - tracker stages, game processes immediately
+    this.currentMode.handleAddAction(direction, ship);
   }
   
   renderStagedActions() {
@@ -261,6 +675,7 @@ class WormholeRollingUI {
     const entry = {
       actions: actions,
       stateChange: stateChange,
+      currentState: this.currentWhState, // Current state after this entry
       finalMass: finalMass,
       passedMass: entryPassedMass,
       totalPassedMass: totalPassedMass,
@@ -338,6 +753,9 @@ class WormholeRollingUI {
       
       // Top section - actions and state changes
       html += `<div class="log-entry-top">`;
+      
+      // Left side - actions and state changes
+      html += `<div class="log-entry-left">`;
       html += `<div class="log-entry-header"><strong>Applied Actions ${entryIndex + 1}:</strong></div>`;
       
       // Show actions in this entry
@@ -357,7 +775,15 @@ class WormholeRollingUI {
                                entry.stateChange === 'gone' ? 'Gone' : entry.stateChange;
         html += `<div class="log-state-change">• *** STATE CHANGE: Wormhole is now ${stateChangeText} ***</div>`;
       }
-      html += `</div>`;
+      html += `</div>`; // Close log-entry-left
+      
+      // Right side - current state
+      if (entry.currentState) {
+        const currentStateText = WORMHOLE_STATES[entry.currentState] || entry.currentState;
+        html += `<div class="log-entry-current-state">Current: ${currentStateText}</div>`;
+      }
+      
+      html += `</div>`; // Close log-entry-top
       
       // Bottom section - mass calculations and ship tracking (horizontal layout)
       html += `<div class="log-entry-bottom">`;
@@ -390,6 +816,16 @@ class WormholeRollingUI {
     });
     
     list.innerHTML = html;
+    
+    // Auto-scroll to keep ship selection visible after adding actions
+    if (this.committedActions.length > 0) {
+      setTimeout(() => {
+        const actionRow = document.getElementById('add-action-row');
+        if (actionRow) {
+          actionRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100); // Small delay to ensure DOM is updated
+    }
   }
   
   updateMassRangeDisplay() {
@@ -422,7 +858,14 @@ class WormholeRollingUI {
     // Hide initial setup, show tracking interface
     document.getElementById('initial-setup').style.display = 'none';
     document.getElementById('tracking-interface').style.display = 'block';
-    document.getElementById('staging-section').style.display = 'block';
+    
+    // Setup mode-specific interface
+    this.currentMode.setupActionInterface();
+    
+    // Initialize mode-specific logic
+    if (this.currentMode === this.gameMode) {
+      this.currentMode.initializeGame();
+    }
     
     // Initialize displays
     this.renderStagedActions();
@@ -492,6 +935,16 @@ class WormholeRollingUI {
     const messageArray = hasShipsOnFarSide ? failureMessages : successMessages;
     const completionMessage = messageArray[Math.floor(Math.random() * messageArray.length)];
     
+    // Create clear summary text
+    let summaryText = '';
+    if (hasShipsOnFarSide) {
+      // Count total stranded ships
+      const totalStranded = Object.values(this.shipsOnFarSide).reduce((sum, count) => sum + count, 0);
+      summaryText = `Failure - wormhole rolled, but you stranded ${totalStranded} ship${totalStranded !== 1 ? 's' : ''}`;
+    } else {
+      summaryText = 'Success - wormhole rolled, and all ships ended up on the correct side';
+    }
+    
     // Create and show completion section
     const completionSection = document.createElement('div');
     completionSection.id = 'completion-section';
@@ -499,6 +952,9 @@ class WormholeRollingUI {
     completionSection.innerHTML = `
       <div class="completion-message ${hasShipsOnFarSide ? 'completion-failure' : 'completion-success'}">
         ${completionMessage}
+      </div>
+      <div class="completion-summary">
+        ${summaryText}
       </div>
     `;
     

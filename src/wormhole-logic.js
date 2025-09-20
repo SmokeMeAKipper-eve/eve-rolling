@@ -81,7 +81,7 @@ class Wormhole {
       case 'destab':
         return { min: Math.round(minBase * 0.1), max: Math.round(maxBase * 0.5) };
       case 'critical':
-        return { min: Math.round(minBase * 0.0), max: Math.round(maxBase * 0.1) };
+        return { min: 0, max: Math.round(maxBase * 0.1) };
       case 'gone':
         return { min: -5000, max: 0 }; // -5000 Gg to 0 Gg
       default:

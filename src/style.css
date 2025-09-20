@@ -18,6 +18,37 @@ body {
     border: 1px solid #333;
 }
 
+/* Header with mode switching */
+.header-with-modes {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.mode-btn {
+    background: linear-gradient(145deg, #3a3a3a, #2a2a2a);
+    color: #e0e0e0;
+    border: 1px solid #555;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+    border-color: #666;
+}
+
+.mode-btn.active {
+    background: linear-gradient(145deg, #4a9eff, #357abd);
+    border-color: #4a9eff;
+    color: white;
+}
+
 h1 {
     text-align: center;
     color: #4CAF50;
@@ -45,6 +76,30 @@ h1 {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 15px;
+}
+
+.random-button-container {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.random-btn {
+    padding: 10px 25px;
+    background: linear-gradient(145deg, #ff9800, #f57c00);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(255, 152, 0, 0.3);
+}
+
+.random-btn:hover {
+    background: linear-gradient(145deg, #f57c00, #ef6c00);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);
 }
 
 .go-button-container {
@@ -231,6 +286,113 @@ h1 {
     min-height: 20px;
 }
 
+.apply-message.game-result-error {
+    color: #f44336;
+}
+
+.apply-message.game-result-success {
+    color: #4CAF50;
+}
+
+.apply-message.game-result-stable {
+    color: #FF9800;
+}
+
+.apply-message.game-result-destab {
+    color: #FF5722;
+}
+
+.apply-message.game-result-critical {
+    color: #f44336;
+}
+
+.apply-message.game-result-collapse {
+    color: #e91e63;
+    font-size: 1.1em;
+}
+
+/* Game Mode Section */
+.game-mode-section {
+    background: linear-gradient(145deg, #1a4d1a, #0d330d);
+    border: 1px solid #2e7d2e;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.game-action-label {
+    color: #81C784;
+    font-weight: 600;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    text-align: center;
+}
+
+.game-action-buttons {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.game-send-btn {
+    padding: 15px 30px;
+    background: linear-gradient(145deg, #4CAF50, #388E3C);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.game-send-btn:hover {
+    background: linear-gradient(145deg, #388E3C, #2E7D32);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+}
+
+.game-send-btn:disabled {
+    background: linear-gradient(145deg, #666, #555);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.game-result-message {
+    color: #81C784;
+    font-weight: 600;
+    min-height: 20px;
+    text-align: center;
+    font-size: 1.1em;
+}
+
+.game-result-message.error {
+    color: #f44336;
+}
+
+.game-result-message.success {
+    color: #4CAF50;
+}
+
+.game-result-message.stable {
+    color: #FF9800;
+}
+
+.game-result-message.destab {
+    color: #FF5722;
+}
+
+.game-result-message.critical {
+    color: #f44336;
+}
+
+.game-result-message.collapse {
+    color: #e91e63;
+    font-size: 1.2em;
+}
+
 /* Actions Log */
 #actions-list {
     background: linear-gradient(145deg, #1a1a1a, #0f0f0f);
@@ -257,8 +419,26 @@ h1 {
 }
 
 .log-entry-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
     padding: 15px;
     padding-bottom: 10px;
+}
+
+.log-entry-left {
+    flex: 1;
+}
+
+.log-entry-current-state {
+    background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: bold;
+    border: 1px solid #555;
+    white-space: nowrap;
 }
 
 .log-entry-bottom {
@@ -365,6 +545,16 @@ h1 {
     color: white;
     border: 2px solid #BF360C;
     box-shadow: 0 4px 20px rgba(255, 87, 34, 0.4);
+}
+
+.completion-summary {
+    margin-top: 15px;
+    padding: 10px;
+    font-size: 14px;
+    color: #ccc;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 @keyframes fadeIn {

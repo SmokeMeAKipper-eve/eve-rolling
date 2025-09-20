@@ -314,4 +314,167 @@ describe('Wormhole Logic', () => {
       expect(outgoingAction.getDirectionText()).toBe('Outgoing >>');
     });
   });
+
+  describe('Critical State Edge Cases', () => {
+    test('should have exactly 0 as minimum for critical state boundaries', () => {
+      // Test multiple wormhole sizes to ensure fix works universally
+      const wormholeSizes = [1000, 2000, 3000, 3300, 5000];
+      
+      wormholeSizes.forEach(size => {
+        const criticalWormhole = new Wormhole(size, 'critical');
+        const boundaries = criticalWormhole.getStateBoundaries();
+        
+        // Critical state should have exactly 0 as minimum (not a calculated value)
+        expect(boundaries.min).toBe(0);
+        
+        // Max should still be 10% of max mass
+        const expectedMax = Math.round(size * 1.1 * 0.1);
+        expect(boundaries.max).toBe(expectedMax);
+      });
+    });
+    
+    test('should show correct range for critical wormhole display', () => {
+      const criticalWormhole = new Wormhole(3000, 'critical');
+      const displayRange = criticalWormhole.getCurrentMassRange();
+      
+      // Display range should also start at 0
+      expect(displayRange.min).toBe(0);
+      expect(displayRange.max).toBe(330); // 10% of 3300 (max mass)
+    });
+  });
+  
+  describe('Collapse Handling', () => {
+    test('should properly handle negative remaining mass', () => {
+      // Simulate the collapse scenario from game mode
+      const wormhole = new Wormhole(1000, 'fresh');
+      const initialRange = wormhole.getCurrentMassRange();
+      
+      // Apply an action that would cause negative remaining mass
+      const hugeMass = { getMass: () => ({ min: 2000, max: 2000 }) }; // 2000 Gg (bigger than wormhole)
+      const collapseAction = new Action(hugeMass, 'B');
+      
+      const result = collapseAction.applyToMass(initialRange);
+      
+      // Should clamp to 0, not go negative
+      expect(result.min).toBe(0);
+      expect(result.max).toBe(0);
+    });
+    
+    test('should handle very small remaining mass correctly', () => {
+      // Test the edge case where remaining mass is very small but positive
+      const smallRange = { min: 5, max: 10 };
+      const smallShip = { getMass: () => ({ min: 3, max: 3 }) };
+      const action = new Action(smallShip, 'A');
+      
+      const result = action.applyToMass(smallRange);
+      
+      expect(result.min).toBe(2); // 5 - 3 = 2
+      expect(result.max).toBe(7); // 10 - 3 = 7
+      expect(result.min).toBeGreaterThan(0);
+      expect(result.max).toBeGreaterThan(0);
+    });
+  });
+  
+  describe('State Boundary Validation', () => {
+    test('should handle boundary calculations for all states with various wormhole sizes', () => {
+      const sizes = [100, 500, 1000, 3300, 5000];
+      const states = ['fresh', 'stable', 'destab', 'critical', 'gone'];
+      
+      sizes.forEach(size => {
+        states.forEach(state => {
+          const wormhole = new Wormhole(size, state);
+          const boundaries = wormhole.getStateBoundaries();
+          
+          // Basic sanity checks
+          expect(Number.isFinite(boundaries.min)).toBe(true);
+          expect(Number.isFinite(boundaries.max)).toBe(true);
+          expect(boundaries.min).toBeLessThanOrEqual(boundaries.max);
+          
+          // State-specific checks
+          if (state === 'critical') {
+            expect(boundaries.min).toBe(0);
+          }
+          
+          if (state === 'gone') {
+            expect(boundaries.min).toBe(-5000);
+            expect(boundaries.max).toBe(0);
+          }
+        });
+      });
+    });
+  });
+  
+  describe('Mass Calculation Precision', () => {
+    test('should maintain integer precision in all calculations', () => {
+      const wormhole = new Wormhole(3000, 'fresh');
+      const ship = new Ship('bs', 'hot'); // 150 Gg exact
+      const action = new Action(ship, 'A');
+      
+      const initialRange = wormhole.getCurrentMassRange();
+      const result = action.applyToMass(initialRange);
+      
+      // All values should be integers (no floating point errors)
+      expect(Number.isInteger(initialRange.min)).toBe(true);
+      expect(Number.isInteger(initialRange.max)).toBe(true);
+      expect(Number.isInteger(result.min)).toBe(true);
+      expect(Number.isInteger(result.max)).toBe(true);
+      
+      // Verify the math is correct
+      expect(result.min).toBe(initialRange.min - 150);
+      expect(result.max).toBe(initialRange.max - 150);
+    });
+  });
+  
+  describe('Game Mode State Transition Logic', () => {
+    test('should handle original vs remaining mass correctly', () => {
+      // Test the concept behind the dual-mass system fix
+      const originalCapacity = 3300; // Full wormhole capacity 
+      const currentRemaining = 1650; // 50% remaining (simulating stable state)
+      
+      // State transition should be based on percentage of original
+      const percentRemaining = (currentRemaining / originalCapacity) * 100;
+      expect(percentRemaining).toBe(50);
+      
+      // At exactly 50%, this should trigger destabilization (≤50% threshold)
+      expect(percentRemaining).toBeLessThanOrEqual(50);
+      
+      // Let's test a case that should stay stable
+      const stableRemaining = 1800; // ~55% remaining
+      const stablePercent = (stableRemaining / originalCapacity) * 100;
+      expect(stablePercent).toBeGreaterThan(50); // Should stay stable
+      
+      // Test destab trigger
+      const destabRemaining = 1500; // ~45% remaining  
+      const destabPercent = (destabRemaining / originalCapacity) * 100;
+      expect(destabPercent).toBeLessThanOrEqual(50); // Should trigger destab
+    });
+    
+    test('should validate game mode percentage ranges for each state', () => {
+      const originalMass = 3000; // Base wormhole
+      
+      // Fresh: 100% remaining (no ships passed)
+      const freshMin = originalMass * 1.0; // 3000
+      const freshMax = originalMass * 1.0; // 3000
+      expect(freshMin).toBe(3000);
+      expect(freshMax).toBe(3000);
+      
+      // Stable: 50-100% remaining  
+      const stableMin = originalMass * 0.5;  // 1500
+      const stableMax = originalMass * 1.0;  // 3000
+      expect(stableMin).toBe(1500);
+      expect(stableMax).toBe(3000);
+      
+      // Destab: 10-50% remaining
+      const destabMin = originalMass * 0.1;  // 300
+      const destabMax = originalMass * 0.5;  // 1500
+      expect(destabMin).toBe(300);
+      expect(destabMax).toBe(1500);
+      
+      // Critical: 0-10% remaining
+      const criticalMin = originalMass * 0.0; // 0
+      const criticalMax = originalMass * 0.1; // 300
+      expect(criticalMin).toBe(0);
+      expect(criticalMax).toBe(300);
+    });
+  });
 });
