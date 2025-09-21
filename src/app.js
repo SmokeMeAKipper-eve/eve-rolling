@@ -651,10 +651,6 @@ class WormholeRollingUI {
       resetButton.textContent = 'Reset Tracking';
     }
     
-    // Update title if needed
-    const title = document.querySelector('h1');
-    title.textContent = `EVE Wormhole Rolling ${newMode.getModeName()}`;
-    
     console.log(`Switched to ${newMode.getModeName()}: ${newMode.getDescription()}`);
   }
   
