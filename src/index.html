@@ -8,15 +8,39 @@
 </head>
 <body>
   <div class="container">
-    <div class="header-with-modes">
-      <button id="tracker-mode-btn" class="mode-btn active">Tracker Mode</button>
-      <h1>EVE Wormhole Rolling Tracker</h1>
-      <button id="game-mode-btn" class="mode-btn">Game Mode</button>
+    <div class="tabbed-header">
+      <div class="tab-container">
+        <button id="tracker-mode-btn" class="tab active">
+          <h1>EVE Wormhole Rolling Tracker</h1>
+          <span class="tab-subtitle">Track real wormholes in-game</span>
+        </button>
+        <button id="game-mode-btn" class="tab">
+          <h1>EVE Wormhole Rolling Game</h1>
+          <span class="tab-subtitle">Practice & simulation mode</span>
+        </button>
+      </div>
+    </div>
+    <div id="instructions-box" class="instructions-box">
+      <div id="tracker-instructions" class="instruction-content active">
+        <strong>Rolling a wormhole?</strong> Track which ships have passed through, manually select when state changes occur, and monitor the range of possible mass remaining. Perfect for coordinating with your fleet during actual wormhole operations.
+      </div>
+      <div id="game-instructions" class="instruction-content">
+        <strong>Practice wormhole rolling</strong> in randomized or selected scenarios. Learn the skills of the pros by experiencing realistic rolling situations with hidden mass calculations and unexpected events.
+      </div>
     </div>
     <div id="initial-setup">
       <form id="planner-form">
         <div class="setup-split-container">
           <div class="setup-left-side">
+            <div class="option-group">
+              <div class="option-label">Wormhole Type (Optional):</div>
+              <div class="wormhole-type-container">
+                <select id="wormhole-type-select" class="wormhole-type-select">
+                  <option value="">Select a wormhole type...</option>
+                </select>
+                <div class="wormhole-info" id="wormhole-info"></div>
+              </div>
+            </div>
             <div class="option-group">
               <div class="option-label">Wormhole Size:</div>
               <div id="wh-size-options" class="option-row"></div>
@@ -39,12 +63,8 @@
           </div>
         </div>
         <div class="setup-buttons-container">
-          <div class="random-button-container">
-            <button id="random-setup" type="button" class="random-btn">🎲 Random Setup</button>
-          </div>
-          <div class="go-button-container">
-            <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
-          </div>
+          <button id="random-setup" type="button" class="random-btn">🎲 Random Setup</button>
+          <button id="start-tracking" type="button" class="go-btn">Start Tracking</button>
         </div>
       </form>
     </div>
@@ -101,6 +121,7 @@
     </div>
   </div>
   <script src="wormhole-logic.js"></script>
+  <script src="wormhole-data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

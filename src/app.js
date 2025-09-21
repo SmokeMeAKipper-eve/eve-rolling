@@ -51,6 +51,7 @@ class GameMode extends GameModeBase {
     this.actualWormholeMass = null; // Hidden actual mass
     this.initialActualMass = null;  // Starting mass for reference
     this.remainingMass = null;      // Current remaining mass
+    this.randomEventOccurred = false; // Track if a random event has already happened this game
   }
   
   getModeName() {
@@ -187,7 +188,7 @@ class GameMode extends GameModeBase {
       console.error(`🚨 CONSISTENCY ERROR: Wormhole showing as collapsed but actual mass is positive: ${this.remainingMass} Gg`);
     }
     
-    // Process random events after the main action is complete and validated
+    // Process random events AFTER the main action is complete and validated
     this.ui.processRandomEventsAfterAction();
   }
   
@@ -261,6 +262,10 @@ class GameMode extends GameModeBase {
   }
   
   initializeGame() {
+    // Reset random event flag for new game
+    this.randomEventOccurred = false;
+    console.log('🎮 New game initialized - random events are now possible (max 1 per game)');
+    
     // Step 1: Determine the original wormhole's full capacity (100% with variance)
     const baseSize = this.ui.initialWhSize;
     const variance = 0.1;
@@ -355,6 +360,7 @@ class WormholeRollingUI {
     this.currentWhState = null;
     this.isTracking = false;
     this.shipsOnFarSide = {};    // Track ships that have gone to the other side
+    this.selectedWormholeType = null; // Track selected wormhole type
     
     // Mode system
     this.currentMode = null;
@@ -365,6 +371,9 @@ class WormholeRollingUI {
   init() {
     // Initialize with tracker mode by default
     this.currentMode = this.trackerMode;
+    
+    // Setup wormhole type dropdown first
+    this.setupWormholeTypeSelection();
     
     // Setup initial selection options
     const whSizeOptions = {};
@@ -388,21 +397,31 @@ class WormholeRollingUI {
     // Far side fleet setup
     this.setupFarSideFleet();
     
-    // Add listener to restriction changes to update far side fleet
+    // Add listener to restriction changes to update far side fleet and auto-select wormhole
     document.getElementById('wh-restriction-options').addEventListener('click', (e) => {
       if (e.target.classList.contains('option-btn')) {
         // Small delay to let the selection update
-        setTimeout(() => this.renderFarSideFleetUI(), 10);
+        setTimeout(() => {
+          this.renderFarSideFleetUI();
+          this.autoSelectWormholeType();
+        }, 10);
+      }
+    });
+    
+    // Add listener to mass changes to auto-select matching wormhole type
+    document.getElementById('wh-size-options').addEventListener('click', (e) => {
+      if (e.target.classList.contains('option-btn')) {
+        setTimeout(() => this.autoSelectWormholeType(), 10);
       }
     });
     
     this.setupEventListeners();
     this.setupModeHandlers();
     
-    // Initialize mode display (hide random button for tracker mode)
-    const randomButtonContainer = document.querySelector('.random-button-container');
-    if (randomButtonContainer) {
-      randomButtonContainer.style.display = 'none'; // Hidden by default (tracker mode)
+    // Initialize mode display (hide random button for tracker mode by default)
+    const randomButton = document.getElementById('random-setup');
+    if (randomButton) {
+      randomButton.style.display = 'none'; // Hidden by default since we start in tracker mode
     }
     
     // Set initial button text for tracker mode (default)
@@ -471,8 +490,124 @@ class WormholeRollingUI {
     this.renderFarSideFleetUI();
   }
   
+  setupWormholeTypeSelection() {
+    const select = document.getElementById('wormhole-type-select');
+    const info = document.getElementById('wormhole-info');
+    
+    // Clear existing options (keep the first "Select..." option)
+    select.innerHTML = '<option value="">Select a wormhole type...</option>';
+    
+    // Get all wormhole codes and sort them
+    const allCodes = getAllWormholeCodes();
+    
+    // Add regular wormholes
+    allCodes.forEach(code => {
+      if (code !== 'K162' && code !== '⛮') { // Skip special wormholes for selection
+        const option = document.createElement('option');
+        option.value = code;
+        option.textContent = code;
+        select.appendChild(option);
+      }
+    });
+    
+    // Add event listener for selection changes
+    select.addEventListener('change', (e) => {
+      const selectedCode = e.target.value;
+      this.onWormholeTypeSelected(selectedCode);
+    });
+  }
+  
+  onWormholeTypeSelected(whCode) {
+    this.selectedWormholeType = whCode;
+    const info = document.getElementById('wormhole-info');
+    
+    if (!whCode) {
+      info.textContent = '';
+      return;
+    }
+    
+    const whInfo = getWormholeInfo(whCode);
+    if (whInfo) {
+      // Update the mass and restriction selections to match
+      this.setMassSelection(whInfo.totalMass);
+      this.setRestrictionSelection(whInfo.restriction);
+      
+      // Update info display
+      info.innerHTML = `
+        <span>→ ${whInfo.destination}</span>
+        <span>•</span>
+        <span>${whInfo.totalMass} Gg</span>
+        <span>•</span>
+        <span>${whInfo.restrictionText}</span>
+      `;
+      
+      // Update far side fleet for new restriction
+      this.renderFarSideFleetUI();
+    }
+  }
+  
+  setMassSelection(mass) {
+    const buttons = document.querySelectorAll('#wh-size-options .option-btn');
+    buttons.forEach(btn => {
+      btn.classList.toggle('selected', btn.textContent === `${mass} Gg`);
+    });
+    
+    // Update the getter function
+    this.getWhSize = () => mass.toString();
+  }
+  
+  setRestrictionSelection(restriction) {
+    const buttons = document.querySelectorAll('#wh-restriction-options .option-btn');
+    buttons.forEach(btn => {
+      btn.classList.toggle('selected', btn.textContent === WORMHOLE_RESTRICTIONS[restriction]);
+    });
+    
+    // Update the getter function
+    this.getWhRestriction = () => restriction.toString();
+  }
+  
+  autoSelectWormholeType() {
+    const currentMass = parseInt(this.getWhSize());
+    const currentRestriction = parseInt(this.getWhRestriction());
+    
+    // Find wormholes that match both mass and restriction
+    let matchingWormholes = [];
+    Object.entries(WORMHOLE_DATA).forEach(([code, data]) => {
+      if (data.totalMass === currentMass && data.restriction === currentRestriction) {
+        matchingWormholes.push(code);
+      }
+    });
+    
+    const select = document.getElementById('wormhole-type-select');
+    const info = document.getElementById('wormhole-info');
+    
+    if (matchingWormholes.length === 1) {
+      // Exact match - select it
+      select.value = matchingWormholes[0];
+      this.selectedWormholeType = matchingWormholes[0];
+      const whInfo = getWormholeInfo(matchingWormholes[0]);
+      info.innerHTML = `
+        <span>→ ${whInfo.destination}</span>
+        <span>•</span>
+        <span>${whInfo.totalMass} Gg</span>
+        <span>•</span>
+        <span>${whInfo.restrictionText}</span>
+      `;
+    } else if (matchingWormholes.length > 1) {
+      // Multiple matches - show options
+      select.value = '';
+      this.selectedWormholeType = null;
+      info.textContent = `${matchingWormholes.length} wormhole types match: ${matchingWormholes.join(', ')}`;
+    } else {
+      // No matches
+      select.value = '';
+      this.selectedWormholeType = null;
+      info.textContent = 'No wormhole types match this mass/restriction combination';
+    }
+  }
+  
   setupModeHandlers() {
-    // Mode switching buttons
+    // Tab switching (automatically resets when switching)
     document.getElementById('tracker-mode-btn').addEventListener('click', () => {
       this.switchToMode(this.trackerMode);
     });
@@ -483,21 +618,25 @@ class WormholeRollingUI {
   }
   
   switchToMode(newMode) {
-    // Reset current session if switching modes while tracking
+    // Always reset when switching modes (since tabs act as mode selectors)
     if (this.isTracking) {
       this.resetAll();
     }
     
     this.currentMode = newMode;
     
-    // Update button states
+    // Update tab states
     document.getElementById('tracker-mode-btn').classList.toggle('active', newMode === this.trackerMode);
     document.getElementById('game-mode-btn').classList.toggle('active', newMode === this.gameMode);
     
-    // Show/hide random button based on mode
-    const randomButtonContainer = document.querySelector('.random-button-container');
-    if (randomButtonContainer) {
-      randomButtonContainer.style.display = newMode === this.gameMode ? 'flex' : 'none';
+    // Update instruction content
+    document.getElementById('tracker-instructions').classList.toggle('active', newMode === this.trackerMode);
+    document.getElementById('game-instructions').classList.toggle('active', newMode === this.gameMode);
+    
+    // Show/hide random button based on mode (only for game mode)
+    const randomButton = document.getElementById('random-setup');
+    if (randomButton) {
+      randomButton.style.display = newMode === this.gameMode ? 'inline-block' : 'none';
     }
     
     // Update button text based on mode
@@ -533,34 +672,23 @@ class WormholeRollingUI {
   }
   
   randomizeSetup() {
-    // Randomly select wormhole size
-    const whSizes = WORMHOLE_MASS_TYPES;
-    const randomSize = whSizes[Math.floor(Math.random() * whSizes.length)];
+    // Randomly select a wormhole type from the database
+    const allCodes = Object.keys(WORMHOLE_DATA);
+    const randomCode = allCodes[Math.floor(Math.random() * allCodes.length)];
+    const whInfo = getWormholeInfo(randomCode);
     
     // Randomly select initial state (exclude 'gone' as that's not valid for starting)
     const initialStates = ['fresh', 'stable', 'destab', 'critical'];
     const randomState = initialStates[Math.floor(Math.random() * initialStates.length)];
     
-    // Randomly select wormhole restriction
-    const restrictions = Object.keys(WORMHOLE_RESTRICTIONS);
-    const randomRestriction = restrictions[Math.floor(Math.random() * restrictions.length)];
+    // Update wormhole type dropdown
+    const select = document.getElementById('wormhole-type-select');
+    select.value = randomCode;
+    this.onWormholeTypeSelected(randomCode);
     
-    // Update the UI to reflect random selection
-    const sizeButtons = document.querySelectorAll('#wh-size-options .option-btn');
+    // Update state selection
     const stateButtons = document.querySelectorAll('#wh-state-options .option-btn');
-    const restrictionButtons = document.querySelectorAll('#wh-restriction-options .option-btn');
-    
-    // Clear all selections
-    sizeButtons.forEach(btn => btn.classList.remove('selected'));
     stateButtons.forEach(btn => btn.classList.remove('selected'));
-    restrictionButtons.forEach(btn => btn.classList.remove('selected'));
-    
-    // Select the random options by triggering click events (updates closures)
-    sizeButtons.forEach(btn => {
-      if (btn.dataset.value === randomSize.toString()) {
-        btn.click();
-      }
-    });
     
     stateButtons.forEach(btn => {
       if (btn.dataset.value === randomState) {
@@ -568,16 +696,10 @@ class WormholeRollingUI {
       }
     });
     
-    restrictionButtons.forEach(btn => {
-      if (btn.dataset.value === randomRestriction) {
-        btn.click();
-      }
-    });
+    // Randomize far side fleet based on the wormhole's restriction
+    this.randomizeFarSideFleet(whInfo.restriction);
     
-    // Randomize far side fleet
-    this.randomizeFarSideFleet(parseInt(randomRestriction));
-    
-    console.log(`Random setup: ${randomSize} Gg wormhole in ${randomState} state, ${WORMHOLE_RESTRICTIONS[randomRestriction]}`);
+    console.log(`Random setup: ${randomCode} (${whInfo.totalMass} Gg, ${whInfo.restrictionText}, → ${whInfo.destination}) in ${randomState} state`);
   }
   
   randomizeFarSideFleet(restrictionLevel) {
@@ -612,6 +734,12 @@ class WormholeRollingUI {
   // Random Events System for Game Mode
   checkForRandomEvents() {
     if (!RANDOM_EVENTS || this.currentMode !== this.gameMode) {
+      return [];
+    }
+    
+    // Only allow one random event per game
+    if (this.gameMode.randomEventOccurred) {
+      console.log('🎲 Random event check: Blocked - one event already occurred this game');
       return [];
     }
     
@@ -654,6 +782,10 @@ class WormholeRollingUI {
     }
   }  processRandomEventAsAction(event) {
     console.log(`\n🎲 Random Event Triggered: ${event.displayName}`);
+    
+    // Mark that a random event has occurred this game
+    this.gameMode.randomEventOccurred = true;
+    console.log('🎲 Random event limit: This was the one allowed event for this game');
     
     const processedActions = [];
     let totalMassImpact = 0;
@@ -771,12 +903,13 @@ class WormholeRollingUI {
     // Handle wormhole collapse from event
     if (this.currentWhState === 'gone') {
       console.log(`  🚨 Random event caused wormhole collapse - triggering completion`);
+      // Update UI to show the event BEFORE triggering completion
+      this.renderActionsList();
       this.handleWormholeCompletion();
       return; // Don't update UI after completion
     }
     
     // Update the UI to show the new mass ranges
-    this.displayStatus();
     this.renderActionsList();
   }
   
