@@ -203,7 +203,7 @@ const RANDOM_EVENTS = [
     {
         name: 'good_get',
         displayName: '⚡ Its "Good Get"!! Famous, elite level griefer!!',
-        probability: 0.005, // 0.5% chance
+        probability: 0.01, // 1% chance
         visible: true, // Player sees the ship go through
         actions: [
             {

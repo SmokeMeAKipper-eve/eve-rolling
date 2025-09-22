@@ -872,6 +872,70 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Range Info Display */
+.range-info-display {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.range-info-title {
+  font-weight: bold;
+  color: #c9d1d9;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.range-info-table {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.range-info-label {
+  font-weight: bold;
+  color: #c9d1d9;
+}
+
+.range-info-values {
+  display: flex;
+  gap: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.range-info-fresh {
+  color: #7d8590;
+}
+
+.range-info-destab {
+  color: #a74e00;
+  font-weight: bold;
+}
+
+.range-info-critical {
+  color: #cf222e;
+  font-weight: bold;
+}
+
+/* Inline range colors for log header */
+.range-fresh {
+  color: #7d8590;
+}
+
+.range-destab {
+  color: #a74e00;
+  font-weight: bold;
+}
+
+.range-critical {
+  color: #cf222e;
+  font-weight: bold;
+}
+
 /* Reset Section */
 .reset-section {
     text-align: center;

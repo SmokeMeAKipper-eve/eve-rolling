@@ -1262,6 +1262,20 @@ class WormholeRollingUI {
     html += `<div class="log-header">`;
     html += `<div><strong>Initial Setup:</strong> ${this.initialWhSize} Gg wormhole in ${stateText} state, ${restrictionText}</div>`;
     
+    // Show the range boundaries for different states
+    const baseMass = this.initialWhSize;
+    const variance = 0.1;
+    const freshMin = Math.round(baseMass * (1 - variance));
+    const freshMax = Math.round(baseMass * (1 + variance));
+    const destabMin = Math.round(freshMin * 0.5);
+    const destabMax = Math.round(freshMax * 0.5);
+    const critMin = Math.round(freshMin * 0.1);
+    const critMax = Math.round(freshMax * 0.1);
+    
+    html += `<div><strong>Fresh / Destab / Crit Range</strong></div>`;
+    html += `<div>  Min: <span class="range-fresh">${freshMin}</span> / <span class="range-destab">${destabMin}</span> / <span class="range-critical">${critMin}</span></div>`;
+    html += `<div>  Max: <span class="range-fresh">${freshMax}</span> / <span class="range-destab">${destabMax}</span> / <span class="range-critical">${critMax}</span></div>`;
+    
     // Show the initial starting mass range (never changes)
     const initialWormhole = new Wormhole(this.initialWhSize, this.initialWhState);
     const initialMass = initialWormhole.getCurrentMassRange();
@@ -1438,6 +1452,8 @@ class WormholeRollingUI {
   updateMassRangeDisplay() {
     document.getElementById('mass-range-display').innerHTML = '';
   }
+  
+
   
   updateDisplay() {
     this.updateMassRangeDisplay();
