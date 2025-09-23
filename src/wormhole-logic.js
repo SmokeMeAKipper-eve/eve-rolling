@@ -219,6 +219,44 @@ const RANDOM_EVENTS = [
         ]
     },
     {
+        name: 'good_get_full_crew',
+        displayName: '⚡ Its "Good Get"!! He brought friends!!',
+        probability: 0.03, // 8% chance
+        visible: true, // Player sees the ship go through
+        actions: [
+            {
+                shipType: 'opcruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'incoming',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'incoming',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'incoming',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            }
+        ]
+    },    
+    {
         name: 'random_cruisers_jump',
         displayName: '⚡ two random stratios jump through the wormhole and flee',
         probability: 0.005, // 0.5% chance
