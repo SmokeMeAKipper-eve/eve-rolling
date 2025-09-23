@@ -203,7 +203,7 @@ const RANDOM_EVENTS = [
     {
         name: 'good_get',
         displayName: '⚡ Its "Good Get"!! Famous, elite level griefer!!',
-        probability: 0.08, // 8% chance
+        probability: 0.2, // 8% chance
         visible: true, // Player sees the ship go through
         actions: [
             {
@@ -221,7 +221,7 @@ const RANDOM_EVENTS = [
     {
         name: 'good_get_full_crew',
         displayName: '⚡ Its "Good Get"!! He brought friends!!',
-        probability: 0.03, // 8% chance
+        probability: 0.2, // 8% chance
         visible: true, // Player sees the ship go through
         actions: [
             {
@@ -237,6 +237,16 @@ const RANDOM_EVENTS = [
             {
                 shipType: 'opcruiser',
                 direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'outgoing',
+                getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
+            },
+            {
+                shipType: 'opcruiser',
+                direction: 'incoming',
                 getMassImpact: () => { return SHIP_TYPES.opcruiser.hot; },
             },
             {
@@ -259,7 +269,7 @@ const RANDOM_EVENTS = [
     {
         name: 'random_cruisers_jump',
         displayName: '⚡ two random stratios jump through the wormhole and flee',
-        probability: 0.005, // 0.5% chance
+        probability: 0.000, // 0.5% chance
         visible: true, // Player sees the ship go through
         actions: [
             {
